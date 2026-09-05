@@ -1,0 +1,59 @@
+services:
+
+  frc-recharge:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: frc_recharge_service
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    ports:
+      # - "8000:8000" 
+      - "127.0.0.1:8890:8000"
+
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+    # networks:
+    #   - pyro_shared_net
+
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+     
+      start_period: 45s
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+  # nginx:
+  #   image: nginx:1.27-alpine        
+  #   container_name: frc_nginx
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/conf.d:/etc/nginx/conf.d:ro   
+  #     - ./nginx/ssl:/etc/nginx/ssl:ro
+  #   networks:
+  #     - pyro_shared_net
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "5"
+
+# networks:
+#   pyro_shared_net:
+#     external: true
