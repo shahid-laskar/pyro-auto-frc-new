@@ -42,7 +42,7 @@ class TestQ023StagingLifecycleDesign:
     def test_q023_inserts_rows_in_staged_state_in_status_s(self, mock_get_conn):
         """bulk_insert_frc_requests must explicitly insert with in_status='S', push_flag='N'."""
         mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = (501, "CAF001")
+        mock_cursor.fetchone.return_value = (501, "CAF001", "9412345678", 2)
         mock_get_conn.side_effect = lambda: _mock_pg_conn(mock_cursor)
 
         sample_row = {
@@ -68,7 +68,13 @@ class TestQ023StagingLifecycleDesign:
         result = bulk_insert_frc_requests([sample_row])
 
         assert len(result) == 1
-        assert result[0] == {"reqid": 501, "caf_serial_no": "CAF001"}
+        assert result[0] == {
+            "reqid": 501,
+            "caf_serial_no": "CAF001",
+            "gsmno": "9412345678",
+            "gsmnumber": "9412345678",
+            "circle_code": 2,
+        }
 
         mock_cursor.execute.assert_called_once()
         executed_sql, executed_params = mock_cursor.execute.call_args[0]

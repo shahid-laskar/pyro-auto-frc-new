@@ -260,7 +260,7 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
             CURRENT_DATE, CURRENT_TIMESTAMP
         )
         ON CONFLICT (batch_date, caf_serial_no) DO NOTHING
-        RETURNING reqid, caf_serial_no
+        RETURNING reqid, caf_serial_no, gsmno, circle_code
     """
     inserted_pairs = []
     with get_pg_conn() as conn: 
@@ -272,6 +272,9 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
                     inserted_pairs.append({
                         "reqid":         result[0],
                         "caf_serial_no": result[1],
+                        "gsmno":         result[2] if len(result) > 2 else row.get("gsmno"),
+                        "gsmnumber":     result[2] if len(result) > 2 else row.get("gsmno"),
+                        "circle_code":   result[3] if len(result) > 3 else row.get("circle_code"),
                     })
 
     logger.info("Postgres: inserted %d/%d rows into frc_pyro_request_data (staged, in_status='S')",
