@@ -1,8 +1,10 @@
 
 import logging
 from contextlib import asynccontextmanager
+from typing import Optional
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse
 
 from app.auth.token_manager import token_manager
 from app.callback import router as callback_router
@@ -82,31 +84,95 @@ async def token_status():
 admin_dependencies = [Depends(require_admin_api_key)]
 
 
+@app.get("/admin/zones", tags=["Admin"], dependencies=admin_dependencies)
+async def get_zones_metadata():
+    """Inspect active zone configuration, resolved circles, and supported zones."""
+    from app.zones import CIRCLE_METADATA, VALID_ZONES, resolve_zones
+    selection = resolve_zones(settings.enabled_zones)
+    active_circles = (
+        list(selection.circle_codes)
+        if selection.circle_codes is not None
+        else sorted(CIRCLE_METADATA.keys())
+    )
+    return {
+        "status": "HEALTHY",
+        "configured_zones": settings.enabled_zones,
+        "resolved_mode": selection.mode,
+        "active_zone_codes": list(selection.zone_codes),
+        "active_circle_count": len(active_circles),
+        "active_circles": active_circles,
+        "all_available_zones": sorted(list(VALID_ZONES)),
+    }
+
+
 @app.post("/admin/trigger-batch-population", tags=["Admin"], dependencies=admin_dependencies)
-async def trigger_batch_population():
-    """Manually run Oracle BCD -> Postgres population."""
+async def trigger_batch_population(
+    zones: Optional[str] = Query(default=None, description="Optional comma-separated zone codes (e.g. NZ,WZ) or ALL"),
+):
+    """Manually run Oracle BCD -> Postgres population with optional zone filter."""
     import asyncio
-    from fastapi.responses import JSONResponse
+    from app.context import ExecutionContext
+    from app.zones import InvalidZoneError
     from app.batch.populator import run_batch_population
-    summary = await asyncio.to_thread(run_batch_population)
+
+    try:
+        ctx = ExecutionContext.for_manual(zones_str=zones)
+    except (InvalidZoneError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    summary = await asyncio.to_thread(run_batch_population, context=ctx)
     if summary.get("skipped_lock_busy"):
         return JSONResponse(
             status_code=409,
             content={
                 "triggered": False,
                 "reason": "Population job already in progress (advisory lock busy)",
+                "execution_id": ctx.execution_id,
+                "execution_source": ctx.source,
+                "effective_zones": list(ctx.zone_codes),
+                "mode": ctx.mode,
+                "circles_count": ctx.circle_count,
                 "summary": summary,
             },
         )
-    return {"triggered": True, "summary": summary}
+    return {
+        "triggered": True,
+        "execution_id": ctx.execution_id,
+        "execution_source": ctx.source,
+        "effective_zones": list(ctx.zone_codes),
+        "mode": ctx.mode,
+        "circles_count": ctx.circle_count,
+        "summary": summary,
+    }
 
 
 @app.post("/admin/trigger-recharge", tags=["Admin"], dependencies=admin_dependencies)
-async def trigger_recharge():
-    """Manually trigger recharge dispatch."""
+async def trigger_recharge(
+    zones: Optional[str] = Query(default=None, description="Optional comma-separated zone codes (e.g. NZ,WZ) or ALL"),
+):
+    """Manually trigger recharge dispatch with optional zone filter."""
+    from app.context import ExecutionContext
+    from app.zones import InvalidZoneError
     from app.processor import process_pending_recharges
-    summary = await process_pending_recharges(batch_size=settings.recharge_batch_size)
-    return {"triggered": True, "summary": summary}
+
+    try:
+        ctx = ExecutionContext.for_manual(zones_str=zones)
+    except (InvalidZoneError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    summary = await process_pending_recharges(
+        batch_size=settings.recharge_batch_size,
+        context=ctx,
+    )
+    return {
+        "triggered": True,
+        "execution_id": ctx.execution_id,
+        "execution_source": ctx.source,
+        "effective_zones": list(ctx.zone_codes),
+        "mode": ctx.mode,
+        "circles_count": ctx.circle_count,
+        "summary": summary,
+    }
 
 
 @app.post("/admin/trigger-status-check", tags=["Admin"], dependencies=admin_dependencies)
