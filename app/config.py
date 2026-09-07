@@ -1,4 +1,7 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.zones import ZoneSelection, resolve_zones
 
 
 class Settings(BaseSettings):
@@ -7,6 +10,21 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    # Rollout / Zonewise control
+    enabled_zones: str = "ALL"
+
+    @field_validator("enabled_zones")
+    @classmethod
+    def validate_enabled_zones(cls, v: str) -> str:
+        selection = resolve_zones(v)
+        if selection.mode == "ALL":
+            return "ALL"
+        return ",".join(selection.zone_codes)
+
+    @property
+    def zone_selection(self) -> ZoneSelection:
+        return resolve_zones(self.enabled_zones)
 
     # Pyro API
     pyro_base_url: str
