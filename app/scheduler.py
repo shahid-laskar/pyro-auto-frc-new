@@ -27,7 +27,13 @@ async def _batch_population_job():
     try:
         from app.batch.populator import run_batch_population
         summary = await asyncio.to_thread(run_batch_population)
-        logger.info("Scheduler: batch population done -- %s", summary)
+        if summary.get("skipped_lock_busy"):
+            logger.warning(
+                "Scheduler: batch population SKIPPED due to active advisory lock (concurrent run active) -- %s",
+                summary,
+            )
+        else:
+            logger.info("Scheduler: batch population done -- %s", summary)
     except Exception as exc:
         logger.error("Scheduler: batch population exception: %s", exc)
 

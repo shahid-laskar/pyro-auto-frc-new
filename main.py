@@ -86,8 +86,18 @@ admin_dependencies = [Depends(require_admin_api_key)]
 async def trigger_batch_population():
     """Manually run Oracle BCD -> Postgres population."""
     import asyncio
+    from fastapi.responses import JSONResponse
     from app.batch.populator import run_batch_population
     summary = await asyncio.to_thread(run_batch_population)
+    if summary.get("skipped_lock_busy"):
+        return JSONResponse(
+            status_code=409,
+            content={
+                "triggered": False,
+                "reason": "Population job already in progress (advisory lock busy)",
+                "summary": summary,
+            },
+        )
     return {"triggered": True, "summary": summary}
 
 

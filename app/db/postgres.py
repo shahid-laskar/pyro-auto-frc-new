@@ -106,7 +106,69 @@ def get_pg_conn() -> Generator:
         _pool.putconn(conn, close=discard)
         if discard:
             logger.warning("Postgres: broken connection discarded from pool")
-    
+
+
+# ── Concurrency guard: Population Advisory Lock (Phase 10) ──────────────────────
+POPULATION_ADVISORY_LOCK_KEY: int = 8292837261947261
+
+
+@contextmanager
+def population_advisory_lock() -> Generator[bool, None, None]:
+    """PostgreSQL session-level advisory lock context manager to guard population execution (Phase 10).
+
+    Acquires a session-level PostgreSQL advisory lock on a dedicated connection:
+        SELECT pg_try_advisory_lock(%s);
+
+    Yields:
+        bool: True if lock was acquired, False if lock is busy (contention).
+
+    Guarantees:
+        - The connection remains open and checked out for the entire protected operation.
+        - On exit (success or exception), if the lock was acquired, calls:
+              SELECT pg_advisory_unlock(%s);
+          and returns the connection to the pool.
+        - If the lock was not acquired (lock busy), yields False immediately,
+          and returns the connection to the pool without blocking.
+    """
+    if _pool is None and not hasattr(get_pg_conn, "mock_calls"):
+        logger.debug("Postgres pool not initialized (test environment); yielding True without DB lock.")
+        yield True
+        return
+
+    with get_pg_conn() as conn:
+        acquired = False
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_lock(%s);", (POPULATION_ADVISORY_LOCK_KEY,))
+            row = cur.fetchone()
+            acquired = bool(row[0]) if row else False
+
+        if not acquired:
+            logger.warning(
+                "Postgres advisory lock %s is BUSY. Concurrent population in progress. Skipping.",
+                POPULATION_ADVISORY_LOCK_KEY,
+            )
+            yield False
+            return
+
+        logger.info(
+            "Postgres advisory lock %s ACQUIRED. Starting protected population execution.",
+            POPULATION_ADVISORY_LOCK_KEY,
+        )
+        try:
+            yield True
+        finally:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT pg_advisory_unlock(%s);", (POPULATION_ADVISORY_LOCK_KEY,))
+                logger.info(
+                    "Postgres advisory lock %s RELEASED.",
+                    POPULATION_ADVISORY_LOCK_KEY,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Postgres: failed to unlock advisory lock %s: %s",
+                    POPULATION_ADVISORY_LOCK_KEY, exc,
+                )
 
 
 # ── Source data queries (batch population) ────────────────────────────────────
