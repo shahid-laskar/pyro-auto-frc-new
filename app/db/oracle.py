@@ -1,7 +1,7 @@
 
 import logging
 from contextlib import contextmanager
-from typing import Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Sequence
 
 
 import oracledb as cx_Oracle
@@ -64,9 +64,28 @@ def get_oracle_conn() -> Generator[cx_Oracle.Connection, None, None]:
 
 # READ
 
-def fetch_eligible_bcd_records(fetch_size: int = 500) -> List[dict]:
-   
-    sql = """
+def fetch_eligible_bcd_records(
+    fetch_size: int = 500,
+    circle_codes: Optional[Sequence[int]] = None,
+) -> List[dict]:
+    binds: Dict[str, Any] = {
+        "status_np": BCD_STATUS_NP,
+        "fetch_size": fetch_size,
+    }
+
+    if circle_codes is not None:
+        unique_circles = sorted(set(int(c) for c in circle_codes))
+        if not unique_circles:
+            logger.info("Oracle BCD: empty circle_codes filter supplied; returning 0 records")
+            return []
+        placeholders = [f":c_{i}" for i in range(len(unique_circles))]
+        for i, c in enumerate(unique_circles):
+            binds[f"c_{i}"] = c
+        circle_predicate = f"AND CIRCLE_CODE IN ({', '.join(placeholders)})"
+    else:
+        circle_predicate = ""
+
+    sql = f"""
         SELECT * FROM (
             SELECT
                 GSMNUMBER,
@@ -79,16 +98,24 @@ def fetch_eligible_bcd_records(fetch_size: int = 500) -> List[dict]:
             AND HLR_FINAL_ACT_DATE IS NOT NULL
             AND FRC_FLOW_STATUS    = :status_np
             AND FRC_REQID          IS NULL           
+            {circle_predicate}
             ORDER BY HLR_FINAL_ACT_DATE ASC
         ) WHERE ROWNUM <= :fetch_size
     """
     with get_oracle_conn() as conn:
         cur = conn.cursor()
-        cur.execute(sql, status_np=BCD_STATUS_NP, fetch_size=fetch_size)
-        cols = [c[0] for c in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        cur.execute(sql, binds)
+        if cur.description:
+            cols = [c[0] for c in cur.description]
+            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+        else:
+            rows = []
 
-    logger.info("Oracle BCD: fetched %d eligible records", len(rows))
+    logger.info(
+        "Oracle BCD: fetched %d eligible records (circles=%s)",
+        len(rows),
+        "ALL" if circle_codes is None else len(unique_circles),
+    )
     return rows
 
 
