@@ -405,23 +405,102 @@ def fetch_staged_unconfirmed_requests(limit: int = 500) -> List[dict]:
 
 # ── Recharge state machine ─────────────────────────────────────────────────────
 @_pg_retry
-def fetch_pending_rows(batch_size: int = 500) -> List[dict]:
-    sql = """
-        SELECT
+def fetch_pending_rows(
+    batch_size: int = 500,
+    circle_codes: Optional[Sequence[int]] = None,
+) -> List[dict]:
+    """Atomically claim and fetch pending dispatch rows using FOR UPDATE SKIP LOCKED (Q024).
+
+    Replaces plain SELECT with atomic SELECT + claim to guarantee dispatch isolation:
+    - Sets push_flag = 'P', push_remarks = 'Claimed for Pyro dispatch', submitted_at = NOW()
+    - Selects eligible rows (in_status = 'C', push_flag IN ('N', 'E'), retry_count <= max_retries)
+    - Applies FOR UPDATE SKIP LOCKED so concurrent workers never receive the same row
+    - Filters by circle_code when circle_codes is provided; nationwide when None (ALL)
+    - Returns the exact rows claimed by this worker
+    """
+    if circle_codes is not None:
+        circle_clause = "AND circle_code = ANY(%s)"
+        params = ([int(c) for c in circle_codes], batch_size)
+    else:
+        circle_clause = ""
+        params = (batch_size,)
+
+    sql = f"""
+        UPDATE public.frc_pyro_request_data
+        SET
+            push_flag    = 'P',
+            push_remarks = 'Claimed for Pyro dispatch',
+            submitted_at = CURRENT_TIMESTAMP,
+            updated_ts   = CURRENT_TIMESTAMP
+        WHERE reqid IN (
+            SELECT reqid
+            FROM public.frc_pyro_request_data
+            WHERE in_status   = 'C'
+              AND push_flag   IN ('N', 'E')
+              AND retry_count <= max_retries
+              {circle_clause}
+            ORDER BY created_at ASC
+            FOR UPDATE SKIP LOCKED
+            LIMIT %s
+        )
+        RETURNING
             reqid, caf_serial_no, gsmno, batch_date, kyc_mode,
             vendormsisdn, ctopup_number, frcamt, mpin, mpin_length,
-            push_flag, retry_count, max_retries, client_txn_id
-        FROM public.frc_pyro_request_data
-        WHERE in_status   = 'C'
-          AND push_flag   IN ('N', 'E')
-          AND retry_count <= max_retries
-        ORDER BY created_at ASC
-        LIMIT %s
+            push_flag, retry_count, max_retries, client_txn_id, circle_code
     """
     with get_pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (batch_size,))
-            return [dict(r) for r in cur.fetchall()]
+            cur.execute(sql, params)
+            claimed_rows = [dict(r) for r in cur.fetchall()]
+
+    if claimed_rows:
+        logger.info(
+            "Postgres (Q024): atomically claimed %d pending requests for dispatch (circles=%s)",
+            len(claimed_rows),
+            "ALL" if circle_codes is None else list(circle_codes),
+        )
+    return claimed_rows
+
+
+@_pg_retry
+def release_unprocessed_claims(reqids: Sequence[int]) -> int:
+    """Release claimed rows back to pending ('N' or 'E') if a batch aborted before submission.
+
+    Only releases rows that are in 'P' state and have not been submitted to Pyro
+    (i.e. pyro_trans_id IS NULL and push_date IS NULL).
+
+    Parameters
+    ----------
+    reqids : Sequence[int]
+        Collection of reqid values to release.
+
+    Returns
+    -------
+    int
+        Count of rows successfully released.
+    """
+    if not reqids:
+        return 0
+
+    unique_reqids = list(set(int(r) for r in reqids))
+    sql = """
+        UPDATE public.frc_pyro_request_data
+        SET
+            push_flag    = CASE WHEN retry_count > 0 THEN 'E' ELSE 'N' END,
+            push_remarks = 'Claim released - batch aborted before submission',
+            updated_ts   = CURRENT_TIMESTAMP
+        WHERE reqid = ANY(%s)
+          AND push_flag = 'P'
+          AND pyro_trans_id IS NULL
+          AND push_date IS NULL
+    """
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (unique_reqids,))
+            released = cur.rowcount
+
+    logger.info("Postgres: released %d/%d unprocessed dispatch claims", released, len(unique_reqids))
+    return released
 
 @_pg_retry
 def mark_as_pushed(reqid: int, pyro_trans_id: int, response_text: str,
@@ -587,8 +666,11 @@ def insert_txn_log(
 
 # ── Async wrappers ─────────────────────────────────────────────────────────────
 
-async def async_fetch_pending_rows(batch_size):
-    return await asyncio.to_thread(fetch_pending_rows, batch_size)
+async def async_fetch_pending_rows(batch_size: int = 500, circle_codes: Optional[Sequence[int]] = None):
+    return await asyncio.to_thread(fetch_pending_rows, batch_size, circle_codes)
+
+async def async_release_unprocessed_claims(reqids: Sequence[int]):
+    return await asyncio.to_thread(release_unprocessed_claims, reqids)
 
 async def async_mark_as_pushed(reqid, pyro_trans_id, response_text, msg2pyro, sc):
     await asyncio.to_thread(mark_as_pushed, reqid, pyro_trans_id,
