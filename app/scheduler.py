@@ -8,6 +8,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.auth.token_manager import token_manager
 from app.config import settings
+from app.context import ExecutionContext
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -23,29 +24,55 @@ async def _daily_auth_job():
 
 
 async def _batch_population_job():
-    logger.info("Scheduler: batch population starting")
     try:
+        ctx = ExecutionContext.for_scheduled()
+        logger.info(
+            "Scheduler: batch population starting (execution_id=%s, source=%s, zones=%s, circle_count=%d, mode=%s)",
+            ctx.execution_id,
+            ctx.source,
+            list(ctx.zone_codes),
+            ctx.circle_count,
+            ctx.mode,
+        )
         from app.batch.populator import run_batch_population
-        summary = await asyncio.to_thread(run_batch_population)
+        summary = await asyncio.to_thread(run_batch_population, context=ctx)
         if summary.get("skipped_lock_busy"):
             logger.warning(
-                "Scheduler: batch population SKIPPED due to active advisory lock (concurrent run active) -- %s",
+                "Scheduler: batch population SKIPPED due to active advisory lock (concurrent run active, execution_id=%s) -- %s",
+                ctx.execution_id,
                 summary,
             )
         else:
-            logger.info("Scheduler: batch population done -- %s", summary)
+            logger.info(
+                "Scheduler: batch population done (execution_id=%s) -- %s",
+                ctx.execution_id,
+                summary,
+            )
     except Exception as exc:
         logger.error("Scheduler: batch population exception: %s", exc)
 
 
 async def _recharge_job():
-    logger.info("Scheduler: recharge batch starting")
     try:
+        ctx = ExecutionContext.for_scheduled()
+        logger.info(
+            "Scheduler: recharge batch starting (execution_id=%s, source=%s, zones=%s, circle_count=%d, mode=%s)",
+            ctx.execution_id,
+            ctx.source,
+            list(ctx.zone_codes),
+            ctx.circle_count,
+            ctx.mode,
+        )
         from app.processor import process_pending_recharges
         summary = await process_pending_recharges(
-            batch_size=settings.recharge_batch_size
+            batch_size=settings.recharge_batch_size,
+            context=ctx,
         )
-        logger.info("Scheduler: recharge done -- %s", summary)
+        logger.info(
+            "Scheduler: recharge done (execution_id=%s) -- %s",
+            ctx.execution_id,
+            summary,
+        )
     except Exception as exc:
         logger.error("Scheduler: recharge exception: %s", exc, exc_info=True)
 
