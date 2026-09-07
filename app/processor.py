@@ -52,10 +52,37 @@ async def process_pending_recharges(
     if context is not None and circle_codes is None:
         circle_codes = context.circle_codes
 
+    if context:
+        logger.info(
+            "Processor started [exec_id=%s][source=%s][zones=%s][mode=%s] (batch_size=%d)",
+            context.execution_id,
+            context.source,
+            list(context.zone_codes),
+            context.mode,
+            batch_size,
+        )
+    else:
+        logger.info("Processor started (batch_size=%d)", batch_size)
+
     rows = await async_fetch_pending_rows(batch_size, circle_codes=circle_codes)
     if not rows:
         logger.info("Processor: no pending rows")
-        return {"processed": 0, "registered": 0, "perm_failed": 0, "retryable": 0}
+        return {
+            "execution_id":      context.execution_id if context else None,
+            "source":            context.source if context else None,
+            "zones":             list(context.zone_codes) if context else None,
+            "mode":              context.mode if context else None,
+            "claimed":           0,
+            "submitted":         0,
+            "success":           0,
+            "transient_failure": 0,
+            "permanent_failure": 0,
+            "retry":             0,
+            "processed":         0,
+            "registered":        0,
+            "perm_failed":       0,
+            "retryable":         0,
+        }
 
     if not token_manager.session_token or not token_manager.access_token:
         logger.warning("Processor: Pyro tokens missing before recharge batch; authenticating once")
@@ -63,11 +90,21 @@ async def process_pending_recharges(
             logger.error("Processor: Pyro authentication unavailable; releasing claimed rows and deferring")
             await async_release_unprocessed_claims([r["reqid"] for r in rows])
             return {
-                "processed": 0,
-                "registered": 0,
-                "perm_failed": 0,
-                "retryable": 0,
-                "auth_failed": True,
+                "execution_id":      context.execution_id if context else None,
+                "source":            context.source if context else None,
+                "zones":             list(context.zone_codes) if context else None,
+                "mode":              context.mode if context else None,
+                "claimed":           len(rows),
+                "submitted":         0,
+                "success":           0,
+                "transient_failure": 0,
+                "permanent_failure": 0,
+                "retry":             0,
+                "processed":         0,
+                "registered":        0,
+                "perm_failed":       0,
+                "retryable":         0,
+                "auth_failed":       True,
             }
 
     registered = perm_failed = retryable = 0
@@ -206,10 +243,27 @@ async def process_pending_recharges(
             await async_release_unprocessed_claims(unprocessed_reqids)
 
     summary = {
-        "processed":   len(processed_reqids),
-        "registered":  registered,
-        "perm_failed": perm_failed,
-        "retryable":   retryable,
+        "execution_id":      context.execution_id if context else None,
+        "source":            context.source if context else None,
+        "zones":             list(context.zone_codes) if context else None,
+        "mode":              context.mode if context else None,
+        "claimed":           len(rows),
+        "submitted":         len(processed_reqids),
+        "success":           registered,
+        "transient_failure": retryable,
+        "permanent_failure": perm_failed,
+        "retry":             retryable,
+        # Legacy/detailed keys preserved:
+        "processed":         len(processed_reqids),
+        "registered":        registered,
+        "perm_failed":       perm_failed,
+        "retryable":         retryable,
     }
-    logger.info("Processor complete -- %s", summary)
+    logger.info(
+        "Processor complete [exec_id=%s][source=%s][zones=%s][mode=%s]: "
+        "claimed=%d submitted=%d success=%d transient_failure=%d permanent_failure=%d retry=%d",
+        summary["execution_id"], summary["source"], summary["zones"], summary["mode"],
+        summary["claimed"], summary["submitted"], summary["success"],
+        summary["transient_failure"], summary["permanent_failure"], summary["retry"],
+    )
     return summary

@@ -20,6 +20,29 @@ def _encrypt_mpin(mpin: str) -> str:
     return encrypt(mpin, settings.pyro_secret_key)
 
 
+def _finalize_summary(summary: dict, context: Optional[ExecutionContext]) -> dict:
+    """Populate standardized Phase 13 observability fields on population summary."""
+    if context:
+        summary["execution_id"] = context.execution_id
+        summary["source"]       = context.source
+        summary["zones"]        = list(context.zone_codes)
+        summary["mode"]         = context.mode
+    else:
+        summary.setdefault("execution_id", None)
+        summary.setdefault("source", None)
+        summary.setdefault("zones", None)
+        summary.setdefault("mode", None)
+
+    summary["oracle_selected"]  = summary.get("oracle_fetched", 0)
+    summary["postgres_matched"] = summary.get("ekyc_matched", 0) + summary.get("dkyc_matched", 0)
+    summary["staged"]           = summary.get("inserted", 0)
+    summary["claim_expected"]   = summary.get("inserted", 0)
+    summary["claim_success"]    = summary.get("bcd_rq_updated", 0)
+    summary["claim_failed"]     = max(0, summary["claim_expected"] - summary["claim_success"])
+    summary["held"]             = max(0, summary["staged"] - summary.get("dispatchable", 0))
+    return summary
+
+
 def run_batch_population(
     context: Optional[ExecutionContext] = None,
     circle_codes: Optional[Sequence[int]] = None,
@@ -27,17 +50,29 @@ def run_batch_population(
     today = date.today().isoformat()
     if context:
         logger.info(
-            "Batch population started for %s (execution_id=%s, mode=%s, zones=%s)",
+            "Batch population started for %s [exec_id=%s][source=%s][zones=%s][mode=%s]",
             today,
             context.execution_id,
+            context.source,
+            list(context.zone_codes),
             context.mode,
-            context.selection.zone_codes,
         )
     else:
         logger.info("Batch population started for %s", today)
 
     summary = {
         "batch_date":                 today,
+        "execution_id":               context.execution_id if context else None,
+        "source":                     context.source if context else None,
+        "zones":                      list(context.zone_codes) if context else None,
+        "mode":                       context.mode if context else None,
+        "oracle_selected":            0,
+        "postgres_matched":           0,
+        "staged":                     0,
+        "claim_expected":             0,
+        "claim_success":              0,
+        "claim_failed":               0,
+        "held":                       0,
         "oracle_fetched":             0,
         "ekyc_matched":               0,
         "dkyc_matched":               0,
@@ -60,7 +95,7 @@ def run_batch_population(
             )
             summary["status"] = "SKIPPED_LOCK_BUSY"
             summary["skipped_lock_busy"] = True
-            return summary
+            return _finalize_summary(summary, context)
 
         effective_circles: Optional[Sequence[int]] = None
         if context is not None:
@@ -77,11 +112,11 @@ def run_batch_population(
         except Exception as exc:
             logger.error("Batch: Oracle fetch failed -- %s", exc)
             summary["errors"] += 1
-            return summary
+            return _finalize_summary(summary, context)
 
         if not bcd_records:
             logger.info("Batch: no eligible BCD records in Oracle")
-            return summary
+            return _finalize_summary(summary, context)
 
         summary["oracle_fetched"] = len(bcd_records)
         gsm_list = [r["GSMNUMBER"] for r in bcd_records]
@@ -104,7 +139,7 @@ def run_batch_population(
         except Exception as exc:
             logger.error("Batch: Postgres KYC fetch failed -- %s", exc)
             summary["errors"] += 1
-            return summary
+            return _finalize_summary(summary, context)
 
         summary["ekyc_matched"] = sum(1 for r in pg_rows if r["kyc_mode"] == "EKYC")
         summary["dkyc_matched"] = sum(1 for r in pg_rows if r["kyc_mode"] == "DKYC")
@@ -113,7 +148,7 @@ def run_batch_population(
 
         if not pg_rows:
             logger.info("Batch: no GSMs with complete FRC data in Postgres")
-            return summary
+            return _finalize_summary(summary, context)
 
         # Step 3: Build insert rows (identical logic for EKYC and DKYC)
         rows_to_insert: List[dict] = []
@@ -218,7 +253,7 @@ def run_batch_population(
 
         if not rows_to_insert:
             logger.info("Batch: no rows to insert after validation")
-            return summary
+            return _finalize_summary(summary, context)
 
         # Step 4: Bulk insert -- returns (reqid, caf_serial_no) per inserted row
         try:
@@ -227,7 +262,7 @@ def run_batch_population(
         except Exception as exc:
             logger.error("Batch: bulk insert failed -- %s", exc)
             summary["errors"] += 1
-            return summary
+            return _finalize_summary(summary, context)
 
         # Step 5: BCD writeback -> RQ (primary idempotency guard)
         # Must happen after successful Postgres insert.
@@ -259,16 +294,14 @@ def run_batch_population(
                 )
                 summary["errors"] += 1
 
+        _finalize_summary(summary, context)
         logger.info(
-            "Batch complete: oracle=%d ekyc=%d dkyc=%d inserted=%d bcd_rq=%d dispatchable=%d "
-            "skip_no_frc=%d skip_no_ctop=%d skip_no_plan=%d skip_mpin=%d skip_mismatch=%d errors=%d",
-            summary["oracle_fetched"],
-            summary["ekyc_matched"], summary["dkyc_matched"],
-            summary["inserted"], summary["bcd_rq_updated"],
-            summary["dispatchable"],
-            summary["skipped_no_frc"], summary["skipped_no_ctop"],
-            summary["skipped_no_plan"], summary["skipped_mpin_err"],
-            summary["skipped_identity_mismatch"],
-            summary["errors"],
+            "Batch complete [exec_id=%s][source=%s][zones=%s][mode=%s]: "
+            "oracle_selected=%d postgres_matched=%d staged=%d claim_expected=%d "
+            "claim_success=%d claim_failed=%d held=%d errors=%d",
+            summary["execution_id"], summary["source"], summary["zones"], summary["mode"],
+            summary["oracle_selected"], summary["postgres_matched"], summary["staged"],
+            summary["claim_expected"], summary["claim_success"], summary["claim_failed"],
+            summary["held"], summary["errors"],
         )
         return summary
