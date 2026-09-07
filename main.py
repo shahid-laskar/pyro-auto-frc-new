@@ -105,3 +105,13 @@ async def trigger_status_check():
     from app.status_checker import run_status_checks
     summary = await run_status_checks()
     return {"triggered": True, "summary": summary}
+
+
+@app.post("/admin/trigger-reconciliation", tags=["Admin"], dependencies=admin_dependencies)
+async def trigger_reconciliation():
+    """Manually trigger cross-database reconciliation for staged requests."""
+    import asyncio
+    from app.batch.reconciler import reconcile_staged_requests
+    summary = await asyncio.to_thread(reconcile_staged_requests)
+    return {"triggered": True, "summary": summary}
+

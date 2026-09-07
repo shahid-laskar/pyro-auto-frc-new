@@ -372,6 +372,37 @@ def mark_requests_staging_failed(reqids: Sequence[int], reason: str = "Oracle cl
     return updated
 
 
+@_pg_retry
+def fetch_staged_unconfirmed_requests(limit: int = 500) -> List[dict]:
+    """Fetch requests in staged state ('S') that are pending Oracle claim confirmation.
+
+    These requests are NOT dispatchable by the recharge processor until
+    their Oracle claim is confirmed (transitioning in_status to 'C').
+
+    Parameters
+    ----------
+    limit : int
+        Maximum number of staged requests to fetch.
+
+    Returns
+    -------
+    List[dict]
+        List of dictionaries with reqid, caf_serial_no, gsmno, circle_code, batch_date, created_at.
+    """
+    sql = """
+        SELECT
+            reqid, caf_serial_no, gsmno, circle_code, batch_date, created_at
+        FROM public.frc_pyro_request_data
+        WHERE in_status = 'S'
+        ORDER BY created_at ASC
+        LIMIT %s
+    """
+    with get_pg_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (limit,))
+            return [dict(r) for r in cur.fetchall()]
+
+
 # ── Recharge state machine ─────────────────────────────────────────────────────
 @_pg_retry
 def fetch_pending_rows(batch_size: int = 500) -> List[dict]:

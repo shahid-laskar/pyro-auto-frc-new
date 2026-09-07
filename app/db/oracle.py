@@ -303,3 +303,65 @@ def update_bcd_status(
     except Exception as exc:
         logger.error("BCD writeback failed (non-fatal): caf=%s reqid=%s status=%s err=%s",
                      caf_serial_no, reqid, frc_flow_status, exc)
+
+
+def fetch_bcd_claim_statuses(candidate_identities: Sequence[dict]) -> Dict[tuple, dict]:
+    """Fetch current Oracle BCD flow status and reqid for candidate identities.
+
+    Used by the reconciliation path to inspect Oracle state:
+    (GSMNUMBER, CAF_SERIAL_NO, CIRCLE_CODE) -> {
+        'GSMNUMBER': str,
+        'CAF_SERIAL_NO': str,
+        'CIRCLE_CODE': int,
+        'FRC_FLOW_STATUS': str,
+        'FRC_REQID': int | None,
+    }
+
+    Parameters
+    ----------
+    candidate_identities : Sequence[dict]
+        List of dicts containing 'caf_serial_no' (or 'CAF_SERIAL_NO'),
+        'gsmnumber' (or 'gsmno' or 'GSMNUMBER'), and 'circle_code' (or 'CIRCLE_CODE').
+
+    Returns
+    -------
+    Dict[tuple, dict]
+        Map from (gsmnumber, caf_serial_no, circle_code) to the Oracle record dict.
+    """
+    if not candidate_identities:
+        return {}
+
+    sql = """
+        SELECT
+            GSMNUMBER,
+            CAF_SERIAL_NO,
+            CIRCLE_CODE,
+            FRC_FLOW_STATUS,
+            FRC_REQID
+        FROM BCD_RECORD_INFO
+        WHERE GSMNUMBER     = :gsmnumber
+          AND CAF_SERIAL_NO = :caf_serial_no
+          AND CIRCLE_CODE   = :circle_code
+    """
+    results: Dict[tuple, dict] = {}
+    with get_oracle_conn() as conn:
+        cur = conn.cursor()
+        for cand in candidate_identities:
+            gsm = str(cand.get("gsmnumber") or cand.get("gsmno") or cand.get("GSMNUMBER", "")).strip()
+            caf = str(cand.get("caf_serial_no") or cand.get("CAF_SERIAL_NO", "")).strip()
+            circle_raw = cand.get("circle_code") if cand.get("circle_code") is not None else cand.get("CIRCLE_CODE")
+            if not gsm or not caf or circle_raw is None:
+                continue
+            circle = int(circle_raw)
+            cur.execute(sql, {"gsmnumber": gsm, "caf_serial_no": caf, "circle_code": circle})
+            row = cur.fetchone()
+            if row:
+                key = (gsm, caf, circle)
+                results[key] = {
+                    "GSMNUMBER": str(row[0]).strip(),
+                    "CAF_SERIAL_NO": str(row[1]).strip(),
+                    "CIRCLE_CODE": int(row[2]),
+                    "FRC_FLOW_STATUS": str(row[3]).strip() if row[3] else None,
+                    "FRC_REQID": int(row[4]) if row[4] is not None else None,
+                }
+    return results
