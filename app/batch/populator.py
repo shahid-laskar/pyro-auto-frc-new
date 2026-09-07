@@ -5,7 +5,11 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from app.config import settings
 from app.context import ExecutionContext
 from app.db.oracle import batch_writeback_bcd_rq, fetch_eligible_bcd_records
-from app.db.postgres import bulk_insert_frc_requests, fetch_cos_bcd_for_gsms
+from app.db.postgres import (
+    bulk_insert_frc_requests,
+    fetch_cos_bcd_for_gsms,
+    mark_requests_dispatchable,
+)
 from app.encryption import encrypt
 
 logger = logging.getLogger(__name__)
@@ -43,6 +47,7 @@ def run_batch_population(
         "skipped_identity_mismatch":  0,
         "inserted":                   0,
         "bcd_rq_updated":             0,
+        "dispatchable":               0,
         "errors":                     0,
     }
 
@@ -215,26 +220,41 @@ def run_batch_population(
 
     # Step 5: BCD writeback -> RQ (primary idempotency guard)
     # Must happen after successful Postgres insert.
-    # If BCD writeback fails, Postgres UNIQUE constraint prevents re-insert
-    # on next batch run (ON CONFLICT DO NOTHING).
+    # Staged rows remain in_status='S' (NOT DISPATCHABLE) until Oracle claim succeeds.
     if inserted_pairs:
         try:
             updated = batch_writeback_bcd_rq(inserted_pairs)
             summary["bcd_rq_updated"] = updated
+
+            # Phase 6 lifecycle transition: Q020 claim succeeded -> mark DISPATCHABLE (in_status='C')
+            if updated == len(inserted_pairs):
+                claimed_reqids = [
+                    p["reqid"] if isinstance(p, dict) else p[0]
+                    for p in inserted_pairs
+                ]
+                dispatchable_count = mark_requests_dispatchable(claimed_reqids)
+                summary["dispatchable"] = dispatchable_count
+            else:
+                logger.warning(
+                    "Batch: BCD writeback count mismatch (updated=%d, expected=%d) -- "
+                    "staged requests remain in_status='S' (NOT DISPATCHABLE)",
+                    updated, len(inserted_pairs),
+                )
         except Exception as exc:
             logger.error(
                 "Batch: BCD writeback failed for %d rows -- %s. "
-                "Postgres rows inserted. Next batch skips via UNIQUE constraint.",
+                "Staged Postgres rows remain in_status='S' (NOT DISPATCHABLE).",
                 len(inserted_pairs), exc,
             )
             summary["errors"] += 1
 
     logger.info(
-        "Batch complete: oracle=%d ekyc=%d dkyc=%d inserted=%d bcd_rq=%d "
+        "Batch complete: oracle=%d ekyc=%d dkyc=%d inserted=%d bcd_rq=%d dispatchable=%d "
         "skip_no_frc=%d skip_no_ctop=%d skip_no_plan=%d skip_mpin=%d skip_mismatch=%d errors=%d",
         summary["oracle_fetched"],
         summary["ekyc_matched"], summary["dkyc_matched"],
         summary["inserted"], summary["bcd_rq_updated"],
+        summary["dispatchable"],
         summary["skipped_no_frc"], summary["skipped_no_ctop"],
         summary["skipped_no_plan"], summary["skipped_mpin_err"],
         summary["skipped_identity_mismatch"],

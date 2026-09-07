@@ -41,6 +41,11 @@ FLAG_SUCCESS = "Y"
 FLAG_FAILED  = "F"
 FLAG_RETRY   = "E"
 
+# in_status state constants (CHECK constraint: 'C', 'S', 'F')
+IN_STATUS_STAGED     = "S"  # Staged by Q023, awaiting Oracle claim (NOT DISPATCHABLE)
+IN_STATUS_CONFIRMED  = "C"  # Oracle claim confirmed (DISPATCHABLE)
+IN_STATUS_FAILED     = "F"  # Oracle claim failed or unrecoverable staging failure
+
 # Pyro codes -> permanent failure (no auto-retry)
 PERMANENT_FAILURE_CODES = {406, 505, 5006, 5007, 5011, 5012, 5030}
 # Subset: invalid data errors -> BCD status 'ID'
@@ -251,7 +256,7 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
             %(ctopup_number)s, %(vendormsisdn)s, %(vendorid)s,
             %(mpin)s, %(mpin_length)s, %(max_retries)s,
             %(kyc_mode)s,
-            'C', 'N', 'N',
+            'S', 'N', 'N',
             CURRENT_DATE, CURRENT_TIMESTAMP
         )
         ON CONFLICT (batch_date, caf_serial_no) DO NOTHING
@@ -269,9 +274,99 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
                         "caf_serial_no": result[1],
                     })
 
-    logger.info("Postgres: inserted %d/%d rows into frc_pyro_request_data",
+    logger.info("Postgres: inserted %d/%d rows into frc_pyro_request_data (staged, in_status='S')",
                 len(inserted_pairs), len(rows))
     return inserted_pairs
+
+
+@_pg_retry
+def mark_requests_dispatchable(reqids: Sequence[int]) -> int:
+    """Advance staged requests from 'S' (Staged) to 'C' (Confirmed/Dispatchable).
+
+    This function must be called only after the corresponding Oracle BCD claim
+    (Q020) has successfully written back. Once marked with in_status='C',
+    the requests become eligible for pickup by fetch_pending_rows.
+
+    Parameters
+    ----------
+    reqids : Sequence[int]
+        Collection of frc_pyro_request_data.reqid values to confirm.
+
+    Returns
+    -------
+    int
+        Number of requests updated to in_status='C'.
+    """
+    if not reqids:
+        return 0
+
+    unique_reqids = list(set(int(r) for r in reqids))
+    sql = """
+        UPDATE public.frc_pyro_request_data
+        SET
+            in_status  = 'C',
+            updated_ts = CURRENT_TIMESTAMP
+        WHERE reqid = ANY(%(reqids)s)
+          AND in_status = 'S'
+    """
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, {"reqids": unique_reqids})
+            updated = cur.rowcount
+
+    logger.info(
+        "Postgres: marked %d/%d requests dispatchable (in_status='C')",
+        updated, len(unique_reqids),
+    )
+    return updated
+
+
+@_pg_retry
+def mark_requests_staging_failed(reqids: Sequence[int], reason: str = "Oracle claim failed") -> int:
+    """Transition staged requests from 'S' (Staged) to 'F' (Failed).
+
+    Used when an Oracle claim attempt fails unrecoverably, ensuring
+    staged requests do not remain indefinitely in non-dispatchable limbo.
+
+    Parameters
+    ----------
+    reqids : Sequence[int]
+        Collection of frc_pyro_request_data.reqid values to mark failed.
+    reason : str
+        Failure explanation recorded in push_remarks and last_error_msg.
+
+    Returns
+    -------
+    int
+        Number of requests marked failed.
+    """
+    if not reqids:
+        return 0
+
+    unique_reqids = list(set(int(r) for r in reqids))
+    sql = """
+        UPDATE public.frc_pyro_request_data
+        SET
+            in_status      = 'F',
+            push_flag      = 'F',
+            final_status   = 'FAILED',
+            push_remarks   = %(reason)s,
+            last_error_msg = %(reason)s,
+            completed_at   = CURRENT_TIMESTAMP,
+            updated_ts     = CURRENT_TIMESTAMP
+        WHERE reqid = ANY(%(reqids)s)
+          AND in_status = 'S'
+    """
+    with get_pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, {"reqids": unique_reqids, "reason": reason[:200]})
+            updated = cur.rowcount
+
+    logger.warning(
+        "Postgres: marked %d/%d requests staging failed (in_status='F'): %s",
+        updated, len(unique_reqids), reason,
+    )
+    return updated
 
 
 # ── Recharge state machine ─────────────────────────────────────────────────────
@@ -485,3 +580,9 @@ async def async_update_status_check_attempt(reqid):
 
 async def async_insert_txn_log(*args, **kwargs):
     await asyncio.to_thread(insert_txn_log, *args, **kwargs)
+
+async def async_mark_requests_dispatchable(reqids):
+    return await asyncio.to_thread(mark_requests_dispatchable, reqids)
+
+async def async_mark_requests_staging_failed(reqids, reason="Oracle claim failed"):
+    return await asyncio.to_thread(mark_requests_staging_failed, reqids, reason)

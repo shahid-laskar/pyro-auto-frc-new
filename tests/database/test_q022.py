@@ -142,13 +142,15 @@ class TestQ022PostgresEnrichment:
 class TestPopulatorIdentityConsistency:
     """Test suite for populator identity consistency validation and candidate matching."""
 
+    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_matching_identity_successfully_staged_and_claimed(
-        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback
+        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback, mock_dispatchable
     ):
+        mock_dispatchable.return_value = 1
         """When Oracle candidate and Postgres enriched record match on (GSM, CAF, CIRCLE), stage and claim."""
         mock_fetch_oracle.return_value = [
             {
@@ -342,13 +344,15 @@ class TestPopulatorIdentityConsistency:
             circle_codes=None,
         )
 
+    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_risk_5_multiple_oracle_candidates_same_gsm_preserved(
-        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback
+        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback, mock_dispatchable
     ):
+        mock_dispatchable.return_value = 2
         """Verify Risk 5: two Oracle candidates with identical GSM but different CAFs are both preserved."""
         mock_fetch_oracle.return_value = [
             {
