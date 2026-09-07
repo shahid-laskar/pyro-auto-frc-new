@@ -106,6 +106,12 @@ CREATE INDEX idx_frc_pyro_final
     ON public.frc_pyro_request_data (final_status, completed_at)
     WHERE final_status IS NOT NULL;
 
+-- Zonewise pickup index (Phase 14):
+-- Partial composite index to accelerate Q024 pickup under high production volume and zonewise filtering
+CREATE INDEX IF NOT EXISTS idx_frc_pyro_pickup_zonewise
+    ON public.frc_pyro_request_data (circle_code, created_at)
+    WHERE push_flag IN ('N', 'E');
+
 
 
 CREATE TABLE IF NOT EXISTS public.frc_txn_log (
