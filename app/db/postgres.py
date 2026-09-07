@@ -3,7 +3,7 @@ import functools
 import logging
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Union
 
 import psycopg2
 import psycopg2.pool
@@ -106,18 +106,50 @@ def get_pg_conn() -> Generator:
 
 # ── Source data queries (batch population) ────────────────────────────────────
 @_pg_retry
-def fetch_cos_bcd_for_gsms(gsm_numbers: List[str]) -> List[dict]:
-   
+def fetch_cos_bcd_for_gsms(
+    gsm_numbers: Sequence[str],
+    circle_codes: Optional[Sequence[Union[int, str]]] = None,
+) -> List[dict]:
+    """Fetch eligible customer, plan, vendor, and MPIN details for candidate GSMs.
+
+    Performs a UNION ALL across EKYC (cos_bcd) and DKYC (cos_bcd_dkyc) tables,
+    joining against ctop_master for POS dealer credentials and frc_plan_table for
+    tariff amounts.
+
+    Parameters
+    ----------
+    gsm_numbers : Sequence[str]
+        List of GSM numbers to enrich.
+    circle_codes : Optional[Sequence[Union[int, str]]]
+        Optional collection of circle codes. When provided (FILTERED mode), only
+        records belonging to these circles are retrieved using:
+            AND cb.circle_code = ANY(%(allowed_circles)s)
+        where allowed_circles are formatted strings without column-side casting.
+        When None (ALL mode), no circle predicate is applied.
+    """
     if not gsm_numbers:
         return []
 
-    sql = """
+    params: Dict[str, Any] = {"gsms": list(gsm_numbers)}
+    circle_predicate = ""
+
+    if circle_codes is not None:
+        if len(circle_codes) == 0:
+            logger.info("fetch_cos_bcd_for_gsms: empty circle_codes provided; returning 0 rows")
+            return []
+        formatted_circles = sorted(
+            set(str(int(c)) if str(c).isdigit() else str(c) for c in circle_codes)
+        )
+        params["allowed_circles"] = formatted_circles
+        circle_predicate = "AND cb.circle_code = ANY(%(allowed_circles)s)"
+
+    sql = f"""
         -- ── EKYC branch (cos_bcd) ─────────────────────────────────────────────
         SELECT
             cb.gsmnumber,
             cb.caf_serial_no,
             cb.de_csccode,
-            cb.circle_code::TEXT AS circle_code,
+            cb.circle_code                      AS circle_code,
             cb.live_photo_time                  AS live_photo_time,
             cb.frc_plan_name                    AS frc_plan_name,
             cb.frc_plan_code                    AS frc_plan_code,
@@ -133,9 +165,10 @@ def fetch_cos_bcd_for_gsms(gsm_numbers: List[str]) -> List[dict]:
             ON cm.ctopupno = cb.frc_ctopup_number
         JOIN public.frc_plan_table fp
             ON fp.plan_code = cb.frc_plan_code
-           AND (fp.circle_code = cb.circle_code::TEXT OR fp.circle_code = '9999')
+           AND (fp.circle_code = cb.circle_code OR fp.circle_code = '9999')
            AND (fp.end_date IS NULL OR fp.end_date >= CURRENT_DATE)
         WHERE cb.gsmnumber = ANY(%(gsms)s)
+          {circle_predicate}
           AND cb.frc_plan_name          IS NOT NULL
           AND cb.frc_plan_code          IS NOT NULL
           AND cb.frc_category_code      IS NOT NULL
@@ -157,7 +190,7 @@ def fetch_cos_bcd_for_gsms(gsm_numbers: List[str]) -> List[dict]:
             cb.gsmnumber,
             cb.caf_serial_no,
             cb.de_csccode,            
-            cb.circle_code::TEXT AS circle_code,
+            cb.circle_code                      AS circle_code,
             cb.customer_photo_time              AS live_photo_time,
             fp.plan_name                        AS frc_plan_name,
             fp.plan_code                        AS frc_plan_code,
@@ -173,23 +206,25 @@ def fetch_cos_bcd_for_gsms(gsm_numbers: List[str]) -> List[dict]:
             ON cm.ctopupno = cb.parent_ctopup_number
         JOIN public.frc_plan_table fp
             ON fp.plan_name  = cb.tariff_plan
-           AND fp.circle_code = cb.circle_code::TEXT
+           AND fp.circle_code = cb.circle_code
            AND (fp.end_date IS NULL OR fp.end_date >= CURRENT_DATE)
         WHERE cb.gsmnumber = ANY(%(gsms)s)
+          {circle_predicate}
           AND cb.tariff_plan            IS NOT NULL
           AND cb.parent_ctopup_number   IS NOT NULL
           AND cb.mpin                   IS NOT NULL
     """
     with get_pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, {"gsms": gsm_numbers})
+            cur.execute(sql, params)
             rows = [dict(r) for r in cur.fetchall()]
 
     ekyc_count = sum(1 for r in rows if r["kyc_mode"] == "EKYC")
     dkyc_count = sum(1 for r in rows if r["kyc_mode"] == "DKYC")
     logger.info(
-        "cos_bcd join: %d/%d GSMs matched (EKYC=%d DKYC=%d)",
+        "cos_bcd join: %d/%d GSMs matched (EKYC=%d DKYC=%d, circle_filter=%s)",
         len(rows), len(gsm_numbers), ekyc_count, dkyc_count,
+        "NONE" if circle_codes is None else len(params.get("allowed_circles", [])),
     )
     return rows
 
