@@ -338,7 +338,7 @@ def fetch_bcd_claim_statuses(candidate_identities: Sequence[dict]) -> Dict[tuple
             CIRCLE_CODE,
             FRC_FLOW_STATUS,
             FRC_REQID
-        FROM BCD_RECORD_INFO
+        FROM CAF_ADMIN.BCD
         WHERE GSMNUMBER     = :gsmnumber
           AND CAF_SERIAL_NO = :caf_serial_no
           AND CIRCLE_CODE   = :circle_code
