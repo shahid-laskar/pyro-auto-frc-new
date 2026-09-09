@@ -27,8 +27,9 @@ DUMMY_SETTINGS_KWARGS = {
 class TestSettingsEnabledZones:
     """Validate Settings.enabled_zones default and validation behaviors."""
 
-    def test_default_enabled_zones_is_all(self):
-        settings = Settings(**DUMMY_SETTINGS_KWARGS)
+    def test_default_enabled_zones_is_all(self, monkeypatch):
+        monkeypatch.delenv("ENABLED_ZONES", raising=False)
+        settings = Settings(_env_file=None, **DUMMY_SETTINGS_KWARGS)
         assert settings.enabled_zones == "ALL"
         assert isinstance(settings.zone_selection, ZoneSelection)
         assert settings.zone_selection.mode == "ALL"
@@ -36,7 +37,7 @@ class TestSettingsEnabledZones:
 
     def test_no_enabled_circles_field_exists(self):
         """Plan explicitly forbids adding 'enabled_circles' to configuration."""
-        settings = Settings(**DUMMY_SETTINGS_KWARGS)
+        settings = Settings(_env_file=None, **DUMMY_SETTINGS_KWARGS)
         assert not hasattr(settings, "enabled_circles")
         assert "enabled_circles" not in Settings.model_fields
 
