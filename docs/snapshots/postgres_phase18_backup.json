@@ -1,0 +1,55 @@
+{
+  "cos_bcd": [],
+  "cos_bcd_dkyc": [
+    {
+      "id": 48,
+      "gsmnumber": "8988246286",
+      "caf_serial_no": "BEC4015117",
+      "circle_code": "55",
+      "de_csccode": "CSCSOL",
+      "tariff_plan": "PREPAID-FRC-1",
+      "parent_ctopup_number": "6026974612",
+      "mpin": "123456"
+    },
+    {
+      "id": 49,
+      "gsmnumber": "8278247741",
+      "caf_serial_no": "BEC4017338",
+      "circle_code": "61",
+      "de_csccode": "HR08122",
+      "tariff_plan": "PREPAID-FRC-1",
+      "parent_ctopup_number": "6026974952",
+      "mpin": "123456"
+    },
+    {
+      "id": 50,
+      "gsmnumber": "7248011700",
+      "caf_serial_no": "BEC4023891",
+      "circle_code": "62",
+      "de_csccode": "UW01102",
+      "tariff_plan": "PREPAID-FRC-1",
+      "parent_ctopup_number": "6026975116",
+      "mpin": "123456"
+    },
+    {
+      "id": 51,
+      "gsmnumber": "7579017985",
+      "caf_serial_no": "BEC3988493",
+      "circle_code": "64",
+      "de_csccode": "UL01110",
+      "tariff_plan": "PREPAID-FRC-1",
+      "parent_ctopup_number": "7382006121",
+      "mpin": "123456"
+    },
+    {
+      "id": 52,
+      "gsmnumber": "9419276386",
+      "caf_serial_no": "BEC4022891",
+      "circle_code": "65",
+      "de_csccode": "JKUDHDSA1735974",
+      "tariff_plan": "PREPAID-FRC-1",
+      "parent_ctopup_number": "7382044973",
+      "mpin": "123456"
+    }
+  ]
+}
