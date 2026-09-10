@@ -99,6 +99,26 @@ class TestPostgresConfigurationRouting:
         assert s.pg_read_host == "replica_host"
         assert s.pg_read_port == 5433
 
+    def test_legacy_property_accessors_forward_to_write_settings(self):
+        s = Settings(
+            **BASE_CONFIG,
+            pg_write_host="write_host",
+            pg_write_port=5432,
+            pg_write_database="write_db",
+            pg_write_user="write_user",
+            pg_write_password="write_pass",
+            pg_read_host="read_host",
+            pg_read_port=5433,
+            pg_read_database="read_db",
+            pg_read_user="read_user",
+            pg_read_password="read_pass",
+        )
+        assert s.pg_host == "write_host"
+        assert s.pg_port == 5432
+        assert s.pg_database == "write_db"
+        assert s.pg_user == "write_user"
+        assert s.pg_password == "write_pass"
+
     def test_missing_read_host_fails_closed(self, monkeypatch):
         monkeypatch.delenv("PG_READ_HOST", raising=False)
         with pytest.raises(ValidationError):

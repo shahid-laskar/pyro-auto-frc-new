@@ -83,4 +83,26 @@ class Settings(BaseSettings):
     run_debit_on_startup: bool = False
     run_cleanup_on_startup: bool = True
 
+    # Legacy property accessors for scripts and callers expecting settings.pg_*
+    @property
+    def pg_host(self) -> str:
+        return self.pg_write_host
+
+    @property
+    def pg_port(self) -> int:
+        return self.pg_write_port
+
+    @property
+    def pg_database(self) -> str:
+        return self.pg_write_database
+
+    @property
+    def pg_user(self) -> str:
+        return self.pg_write_user
+
+    @property
+    def pg_password(self) -> str:
+        return self.pg_write_password
+
+
 settings = Settings()
