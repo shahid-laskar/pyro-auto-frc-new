@@ -1,4 +1,4 @@
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.zones import ZoneSelection, resolve_zones
@@ -9,6 +9,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     # Rollout / Zonewise control
@@ -40,12 +41,17 @@ class Settings(BaseSettings):
     oracle_password: str
     oracle_dsn: str              # host:port/service_name
 
-    # Postgres DB (all other tables)
-    pg_host: str
-    pg_port: int = 5432
-    pg_database: str
-    pg_user: str
-    pg_password: str
+    # Postgres DB. Legacy PG_* names remain accepted for the write endpoint.
+    pg_write_host: str = Field(validation_alias=AliasChoices("PG_WRITE_HOST", "PG_HOST"))
+    pg_write_port: int = Field(default=5432, validation_alias=AliasChoices("PG_WRITE_PORT", "PG_PORT"))
+    pg_write_database: str = Field(validation_alias=AliasChoices("PG_WRITE_DATABASE", "PG_DATABASE"))
+    pg_write_user: str = Field(validation_alias=AliasChoices("PG_WRITE_USER", "PG_USER"))
+    pg_write_password: str = Field(validation_alias=AliasChoices("PG_WRITE_PASSWORD", "PG_PASSWORD"))
+    pg_read_host: str = Field(validation_alias="PG_READ_HOST")
+    pg_read_port: int = Field(default=5433, validation_alias="PG_READ_PORT")
+    pg_read_database: str = Field(validation_alias="PG_READ_DATABASE")
+    pg_read_user: str = Field(validation_alias="PG_READ_USER")
+    pg_read_password: str = Field(validation_alias="PG_READ_PASSWORD")
     pg_min_conn: int = 2
     pg_max_conn: int = 10
     recharge_max_retries: int = 3

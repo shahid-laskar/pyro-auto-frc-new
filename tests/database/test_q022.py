@@ -37,19 +37,19 @@ class TestQ022PostgresEnrichment:
 
     def test_q022_empty_gsm_numbers_returns_empty_list_without_db_call(self):
         """When gsm_numbers is empty, return [] immediately without acquiring DB connection."""
-        with patch("app.db.postgres.get_pg_conn") as mock_get_conn:
+        with patch("app.db.postgres.get_pg_read_conn") as mock_get_conn:
             result = fetch_cos_bcd_for_gsms([])
             assert result == []
             mock_get_conn.assert_not_called()
 
     def test_q022_empty_circle_codes_returns_empty_list_without_db_call(self):
         """When circle_codes is explicitly empty sequence [], return [] without querying."""
-        with patch("app.db.postgres.get_pg_conn") as mock_get_conn:
+        with patch("app.db.postgres.get_pg_read_conn") as mock_get_conn:
             result = fetch_cos_bcd_for_gsms(["9412345678"], circle_codes=[])
             assert result == []
             mock_get_conn.assert_not_called()
 
-    @patch("app.db.postgres.get_pg_conn")
+    @patch("app.db.postgres.get_pg_read_conn")
     def test_q022_all_mode_no_circle_predicate_and_no_text_cast(self, mock_get_conn):
         """When circle_codes=None (ALL mode), circle predicate is omitted and ::TEXT cast is absent."""
         mock_cursor = _make_mock_pg_cursor(rows=[
@@ -92,7 +92,7 @@ class TestQ022PostgresEnrichment:
         # Verify params
         assert executed_params == {"gsms": ["9412345678"]}
 
-    @patch("app.db.postgres.get_pg_conn")
+    @patch("app.db.postgres.get_pg_read_conn")
     def test_q022_filtered_mode_single_circle(self, mock_get_conn):
         """When circle_codes=[2], ANY(%(allowed_circles)s) is bound with string list ['2']."""
         mock_cursor = _make_mock_pg_cursor(rows=[])
@@ -110,7 +110,7 @@ class TestQ022PostgresEnrichment:
             "allowed_circles": ["2"],
         }
 
-    @patch("app.db.postgres.get_pg_conn")
+    @patch("app.db.postgres.get_pg_read_conn")
     def test_q022_filtered_mode_nz_circles(self, mock_get_conn):
         """When NZ circles are passed, allowed_circles contains sorted strings for all 9 NZ circles."""
         mock_cursor = _make_mock_pg_cursor(rows=[])
@@ -125,7 +125,7 @@ class TestQ022PostgresEnrichment:
         assert executed_params["gsms"] == ["9412345678", "9412345679"]
         assert executed_params["allowed_circles"] == ["2", "55", "56", "59", "60", "61", "62", "64", "65"]
 
-    @patch("app.db.postgres.get_pg_conn")
+    @patch("app.db.postgres.get_pg_read_conn")
     def test_q022_string_circle_codes_input_normalized(self, mock_get_conn):
         """String circle inputs like '02', '55' are normalized to integer strings and deduplicated."""
         mock_cursor = _make_mock_pg_cursor(rows=[])

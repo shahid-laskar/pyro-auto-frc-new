@@ -10,7 +10,7 @@ from app.auth.token_manager import token_manager
 from app.callback import router as callback_router
 from app.config import settings
 from app.db.oracle import close_oracle_pool, init_oracle_pool
-from app.db.postgres import close_pg_pool, init_pg_pool
+from app.db.postgres import close_pg_pool, init_pg_pool, postgres_health
 from app.scheduler import start_scheduler, stop_scheduler
 from app.security import require_admin_api_key
 
@@ -66,6 +66,13 @@ app.include_router(callback_router)
 @app.get("/health", tags=["Ops"])
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/health/database", tags=["Ops"])
+async def database_health():
+    """Non-mutating read/write PostgreSQL endpoint diagnostics."""
+    import asyncio
+    return await asyncio.to_thread(postgres_health)
 
 
 @app.get("/token-status", tags=["Ops"])
@@ -190,4 +197,3 @@ async def trigger_reconciliation():
     from app.batch.reconciler import reconcile_staged_requests
     summary = await asyncio.to_thread(reconcile_staged_requests)
     return {"triggered": True, "summary": summary}
-

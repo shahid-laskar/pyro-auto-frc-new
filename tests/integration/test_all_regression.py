@@ -213,7 +213,7 @@ class TestAllModeEndToEndPipeline:
         assert "CIRCLE_CODE IN" not in sql
         assert binds == {"status_np": "NP", "fetch_size": 200}
 
-    @patch("app.db.postgres.get_pg_conn")
+    @patch("app.db.postgres.get_pg_read_conn")
     def test_all_mode_q022_enrichment_query_structure(self, mock_get_conn):
         """Under ALL mode (circle_codes=None), Q022 omits circle predicate and has no text casts."""
         mock_cursor = MagicMock()

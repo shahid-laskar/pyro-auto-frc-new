@@ -16,10 +16,14 @@ DUMMY_SETTINGS_KWARGS = {
     "oracle_user": "dummy_user",
     "oracle_password": "dummy_password",
     "oracle_dsn": "dummy_host:1521/dummy_service",
-    "pg_host": "localhost",
-    "pg_database": "dummy_db",
-    "pg_user": "dummy_user",
-    "pg_password": "dummy_password",
+    "pg_write_host": "localhost",
+    "pg_write_database": "dummy_db",
+    "pg_write_user": "dummy_user",
+    "pg_write_password": "dummy_password",
+    "pg_read_host": "localhost",
+    "pg_read_database": "dummy_db",
+    "pg_read_user": "dummy_read_user",
+    "pg_read_password": "dummy_read_password",
     "callback_base_url": "https://callback.example.com",
 }
 

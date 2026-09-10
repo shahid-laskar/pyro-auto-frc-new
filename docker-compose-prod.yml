@@ -7,6 +7,8 @@ services:
 
     env_file:
       - .env
+    # .env must provide PG_READ_* and PG_WRITE_* credentials/endpoints.
+    # Legacy PG_* variables remain accepted for the write endpoint.
     ports:
       - "127.0.0.1:8000:8000"
     # expose:

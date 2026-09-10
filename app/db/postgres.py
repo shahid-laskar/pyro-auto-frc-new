@@ -32,6 +32,10 @@ def _pg_retry(fn):
             return fn(*args, **kwargs)
     return wrapper
 
+_read_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
+_write_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
+# Compatibility marker retained for older tests/integrations; production
+# routing uses the explicit pools above.
 _pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
 
 # push_flag state constants
@@ -55,41 +59,106 @@ INVALID_DATA_CODES = {5006, 5011, 5012, 5030}
 # ── Pool lifecycle ─────────────────────────────────────────────────────────────
 
 def init_pg_pool() -> None:
-    global _pool
-    _pool = psycopg2.pool.ThreadedConnectionPool(
-        minconn=settings.pg_min_conn,
-        maxconn=settings.pg_max_conn,
-        host=settings.pg_host,
-        port=settings.pg_port,
-        database=settings.pg_database,
-        user=settings.pg_user,
-        password=settings.pg_password,
-        keepalives=1,
-        keepalives_idle=30,
-        keepalives_interval=10,
-        keepalives_count=5,
+    global _read_pool, _write_pool, _pool
+    common = {
+        "minconn": settings.pg_min_conn,
+        "maxconn": settings.pg_max_conn,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
+    _write_pool = psycopg2.pool.ThreadedConnectionPool(
+        **common,
+        host=settings.pg_write_host,
+        port=settings.pg_write_port,
+        database=settings.pg_write_database,
+        user=settings.pg_write_user,
+        password=settings.pg_write_password,
     )
-    logger.info("Postgres pool initialised (min=%d max=%d)",
+    _pool = _write_pool
+    try:
+        _read_pool = psycopg2.pool.ThreadedConnectionPool(
+            **common,
+            host=settings.pg_read_host,
+            port=settings.pg_read_port,
+            database=settings.pg_read_database,
+            user=settings.pg_read_user,
+            password=settings.pg_read_password,
+        )
+    except Exception:
+        _write_pool.closeall()
+        _write_pool = None
+        _pool = None
+        raise
+    logger.info("Postgres write pool initialised (min=%d max=%d)",
+                settings.pg_min_conn, settings.pg_max_conn)
+    logger.info("Postgres read pool initialised (min=%d max=%d)",
                 settings.pg_min_conn, settings.pg_max_conn)
 
 
 def close_pg_pool() -> None:
-    global _pool
-    if _pool:
-        _pool.closeall()
-        _pool = None
-        logger.info("Postgres pool closed")
+    global _read_pool, _write_pool, _pool
+    if _read_pool:
+        _read_pool.closeall()
+        _read_pool = None
+        logger.info("Postgres read pool closed")
+    if _write_pool:
+        _write_pool.closeall()
+        _write_pool = None
+        logger.info("Postgres write pool closed")
+    _pool = None
+
+
+def _probe_pool(pool, label: str) -> dict:
+    if pool is None:
+        return {"status": "unavailable", "role": label}
+    try:
+        conn = pool.getconn()
+    except Exception as exc:
+        return {"status": "error", "role": label, "error": type(exc).__name__}
+    discard = False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT inet_server_port(), pg_is_in_recovery();")
+            port, in_recovery = cur.fetchone()
+        return {
+            "status": "ok",
+            "role": label,
+            "server_port": port,
+            "in_recovery": in_recovery,
+        }
+    except Exception as exc:
+        discard = isinstance(exc, psycopg2.OperationalError) or bool(conn.closed)
+        return {"status": "error", "role": label, "error": type(exc).__name__}
+    finally:
+        try:
+            conn.rollback()
+        except Exception:
+            discard = True
+        pool.putconn(conn, close=discard)
+
+
+def postgres_health() -> dict:
+    """Return non-mutating health details for both PostgreSQL endpoints."""
+    return {
+        "read": _probe_pool(_read_pool, "read"),
+        "write": _probe_pool(_write_pool, "write"),
+    }
 
 
 @contextmanager
-def get_pg_conn() -> Generator:
-    conn = _pool.getconn()
+def _get_pg_conn(role: str) -> Generator:
+    pool = _read_pool if role == "read" else _write_pool
+    if pool is None:
+        raise RuntimeError(f"Postgres {role} pool is not initialized")
+    conn = pool.getconn()
     # The pool has no built-in liveness check — swap out any connection the
     # server dropped while it was idle (presents as conn.closed != 0).
     if conn.closed:
         logger.warning("Postgres: stale connection detected on checkout — replacing")
-        _pool.putconn(conn, close=True)
-        conn = _pool.getconn()
+        pool.putconn(conn, close=True)
+        conn = pool.getconn()
     discard = False
     try:
         yield conn
@@ -103,9 +172,28 @@ def get_pg_conn() -> Generator:
             logger.warning("Postgres: rollback failed — discarding connection")
         raise
     finally:
-        _pool.putconn(conn, close=discard)
+        pool.putconn(conn, close=discard)
         if discard:
-            logger.warning("Postgres: broken connection discarded from pool")
+            logger.warning("Postgres %s: broken connection discarded from pool", role)
+
+
+@contextmanager
+def get_pg_read_conn() -> Generator:
+    with _get_pg_conn("read") as conn:
+        yield conn
+
+
+@contextmanager
+def get_pg_write_conn() -> Generator:
+    with get_pg_conn() as conn:
+        yield conn
+
+
+@contextmanager
+def get_pg_conn() -> Generator:
+    """Backward-compatible write connection context."""
+    with _get_pg_conn("write") as conn:
+        yield conn
 
 
 # ── Concurrency guard: Population Advisory Lock (Phase 10) ──────────────────────
@@ -130,12 +218,12 @@ def population_advisory_lock() -> Generator[bool, None, None]:
         - If the lock was not acquired (lock busy), yields False immediately,
           and returns the connection to the pool without blocking.
     """
-    if _pool is None and not hasattr(get_pg_conn, "mock_calls"):
+    if _write_pool is None and not hasattr(get_pg_conn, "mock_calls") and not hasattr(get_pg_write_conn, "mock_calls"):
         logger.debug("Postgres pool not initialized (test environment); yielding True without DB lock.")
         yield True
         return
 
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         acquired = False
         with conn.cursor() as cur:
             cur.execute("SELECT pg_try_advisory_lock(%s);", (POPULATION_ADVISORY_LOCK_KEY,))
@@ -281,7 +369,7 @@ def fetch_cos_bcd_for_gsms(
           AND cb.parent_ctopup_number   IS NOT NULL
           AND cb.mpin                   IS NOT NULL
     """
-    with get_pg_conn() as conn:
+    with get_pg_read_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params)
             rows = [dict(r) for r in cur.fetchall()]
@@ -325,7 +413,7 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
         RETURNING reqid, caf_serial_no, gsmno, circle_code
     """
     inserted_pairs = []
-    with get_pg_conn() as conn: 
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             for row in rows:
                 cur.execute(sql, row)
@@ -374,7 +462,7 @@ def mark_requests_dispatchable(reqids: Sequence[int]) -> int:
         WHERE reqid = ANY(%(reqids)s)
           AND in_status = 'S'
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, {"reqids": unique_reqids})
             updated = cur.rowcount
@@ -422,7 +510,7 @@ def mark_requests_staging_failed(reqids: Sequence[int], reason: str = "Oracle cl
         WHERE reqid = ANY(%(reqids)s)
           AND in_status = 'S'
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, {"reqids": unique_reqids, "reason": reason[:200]})
             updated = cur.rowcount
@@ -459,7 +547,7 @@ def fetch_staged_unconfirmed_requests(limit: int = 500) -> List[dict]:
         ORDER BY created_at ASC
         LIMIT %s
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, (limit,))
             return [dict(r) for r in cur.fetchall()]
@@ -510,7 +598,7 @@ def fetch_pending_rows(
             vendormsisdn, ctopup_number, frcamt, mpin, mpin_length,
             push_flag, retry_count, max_retries, client_txn_id, circle_code
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, params)
             claimed_rows = [dict(r) for r in cur.fetchall()]
@@ -556,7 +644,7 @@ def release_unprocessed_claims(reqids: Sequence[int]) -> int:
           AND pyro_trans_id IS NULL
           AND push_date IS NULL
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (unique_reqids,))
             released = cur.rowcount
@@ -585,7 +673,7 @@ def mark_as_pushed(reqid: int, pyro_trans_id: int, response_text: str,
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (pyro_trans_id, initial_statuscode,
                               msg2pyro, response_text, client_txn_id, reqid))
@@ -610,7 +698,7 @@ def mark_as_success(reqid: int, response_text: str,balance_before: float,
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (final_statuscode, balance_before,balance_after, response_text, reqid))
 
@@ -636,7 +724,7 @@ def mark_as_failed(reqid: int, push_flag: str, remarks: str,
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (
                 client_txn_id, push_flag, remarks[:200], remarks[:500], response_text,
@@ -658,7 +746,7 @@ def fetch_pushed_rows_for_status_check() -> List[dict]:
           AND push_date <= CURRENT_TIMESTAMP - INTERVAL '2 minutes'
         ORDER BY push_date ASC
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql)
             return [dict(r) for r in cur.fetchall()]
@@ -672,7 +760,7 @@ def update_status_check_attempt(reqid: int) -> None:
             updated_ts          = CURRENT_TIMESTAMP
         WHERE reqid = %s
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (reqid,))
 
@@ -683,7 +771,7 @@ def find_row_by_pyro_trans_id(pyro_trans_id: int) -> Optional[dict]:
         FROM public.frc_pyro_request_data
         WHERE pyro_trans_id = %s
     """
-    with get_pg_conn() as conn:
+    with get_pg_write_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(sql, (pyro_trans_id,))
             row = cur.fetchone()
@@ -711,7 +799,7 @@ def insert_txn_log(
         ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     """
     try:
-        with get_pg_conn() as conn:
+        with get_pg_write_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (
                     frc_reqid, caf_serial_no, gsmno, batch_date, client_txn_id,

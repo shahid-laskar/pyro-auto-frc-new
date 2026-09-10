@@ -16,7 +16,7 @@ from app.db.oracle import batch_writeback_bcd_rq
 
 
 class TestQ022IndexCompliance:
-    @patch("app.db.postgres.get_pg_conn")
+    @patch("app.db.postgres.get_pg_read_conn")
     def test_q022_uses_native_string_comparison_without_casting(self, mock_get_pg_conn):
         """Q022 must use native string comparison (cb.circle_code = ANY) without column casts."""
         mock_conn = MagicMock()
