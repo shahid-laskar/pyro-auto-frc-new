@@ -1,0 +1,75 @@
+|REMARKS_VAL                        |RECORD_COUNT|PERCENTAGE|EARLIEST_DATE          |LATEST_DATE            |
+|-----------------------------------|------------|----------|-----------------------|-----------------------|
+|FRC DONE MANUALLY FROM OTHER SOURCE|22,079      |99.96     |2026-09-12 00:03:10.000|2026-09-19 13:47:14.000|
+|FRC SUCCESS                        |8           |0.04      |2026-09-12 11:17:02.000|2026-09-19 12:33:17.000|
+|FRCSTATUS|REMARKS                                                      |RECORD_COUNT|MIN_EDATE              |MAX_EDATE              |
+|---------|-------------------------------------------------------------|------------|-----------------------|-----------------------|
+|<NULL>   |<NULL>                                                       |1,607       |2026-09-12 01:40:29.000|2026-09-19 14:32:56.000|
+|D        |FRC DONE MANUALLY FROM OTHER SOURCE                          |423         |2026-09-12 09:20:33.000|2026-09-19 13:39:30.000|
+|F        |<NULL>                                                       |1,435       |2026-09-12 00:03:18.000|2026-09-19 13:40:07.000|
+|P        |<NULL>                                                       |164,781     |2026-09-12 00:00:01.000|2026-09-19 13:47:37.000|
+|R        |<NULL>                                                       |38,600      |2026-09-12 00:02:30.000|2026-11-03 16:05:50.000|
+|R        |WRONG MPIN,REJECTED BY PYRO-FRC May be DONE MANUALLY         |433         |2026-09-12 06:54:42.000|2026-09-19 13:36:43.000|
+|R        |UNAUTHORIZED ACCESS,REJECTED BY PYRO-FRC May be DONE MANUALLY|53          |2026-09-12 10:59:43.000|2026-09-19 12:15:49.000|
+|R        |INVALID MPIN,REJECTED BY PYRO-FRC May be DONE MANUALLY       |10          |2026-09-12 12:59:45.000|2026-09-18 02:00:46.000|
+|S        |<NULL>                                                       |5,198       |2026-09-12 00:03:55.000|2026-09-19 13:50:03.000|
+|Y        |FRC DONE MANUALLY FROM OTHER SOURCE                          |22,079      |2026-09-12 00:03:10.000|2026-09-19 13:47:14.000|
+|Y        |FRC SUCCESS                                                  |8           |2026-09-12 11:17:02.000|2026-09-19 12:33:17.000|
+|FRCSTATUS|PYRO_STATUS|SS_STATUS|REMARKS                                                      |RECORD_COUNT|
+|---------|-----------|---------|-------------------------------------------------------------|------------|
+|Y        |<NULL>     |R        |FRC DONE MANUALLY FROM OTHER SOURCE                          |536,424     |
+|D        |<NULL>     |R        |1-FRC DONE MANUALLY FROM OTHER SOURCE                        |128,755     |
+|D        |<NULL>     |R        |FRC DONE MANUALLY FROM OTHER SOURCE                          |40,089      |
+|R        |P1         |R        |WRONG MPIN,REJECTED BY PYRO-FRC May be DONE MANUALLY         |16,577      |
+|Y        |<NULL>     |R        |1-FRC DONE MANUALLY FROM OTHER SOURCE                        |12,979      |
+|Y        |N          |N        |FRC DONE MANUALLY FROM OTHER SOURCE                          |5,559       |
+|R        |P1         |R        |UNAUTHORIZED ACCESS,REJECTED BY PYRO-FRC May be DONE MANUALLY|2,227       |
+|D        |<NULL>     |R        |249-FRC DONE MANUALLY FROM OTHER SOURCE                      |965         |
+|D        |<NULL>     |R        |199-FRC DONE MANUALLY FROM OTHER SOURCE                      |403         |
+|R        |P1         |R        |INVALID MPIN,REJECTED BY PYRO-FRC May be DONE MANUALLY       |191         |
+|D        |<NULL>     |R        |153-FRC DONE MANUALLY FROM OTHER SOURCE                      |158         |
+|D        |<NULL>     |R        |107-FRC DONE MANUALLY FROM OTHER SOURCE                      |124         |
+|R        |N          |N        |WRONG MPIN,REJECTED BY PYRO-FRC May be DONE MANUALLY         |52          |
+|Y        |<NULL>     |R        |249-FRC DONE MANUALLY FROM OTHER SOURCE                      |47          |
+|D        |<NULL>     |R        |1499-FRC DONE MANUALLY FROM OTHER SOURCE                     |37          |
+|D        |<NULL>     |R        |197-FRC DONE MANUALLY FROM OTHER SOURCE                      |33          |
+|D        |<NULL>     |R        |229-FRC DONE MANUALLY FROM OTHER SOURCE                      |23          |
+|D        |<NULL>     |R        |997-FRC DONE MANUALLY FROM OTHER SOURCE                      |12          |
+|Y        |<NULL>     |R        |153-FRC DONE MANUALLY FROM OTHER SOURCE                      |10          |
+|D        |<NULL>     |R        |1999-FRC DONE MANUALLY FROM OTHER SOURCE                     |9           |
+|D        |<NULL>     |R        |2399-FRC DONE MANUALLY FROM OTHER SOURCE                     |8           |
+|D        |<NULL>     |R        |897-FRC DONE MANUALLY FROM OTHER SOURCE                      |7           |
+|Y        |<NULL>     |R        |199-FRC DONE MANUALLY FROM OTHER SOURCE                      |7           |
+|Y        |<NULL>     |R        |1499-FRC DONE MANUALLY FROM OTHER SOURCE                     |3           |
+|R        |N          |N        |UNAUTHORIZED ACCESS,REJECTED BY PYRO-FRC May be DONE MANUALLY|3           |
+|Y        |<NULL>     |R        |107-FRC DONE MANUALLY FROM OTHER SOURCE                      |2           |
+|Y        |<NULL>     |R        |197-FRC DONE MANUALLY FROM OTHER SOURCE                      |1           |
+|Y        |<NULL>     |R        |2399-FRC DONE MANUALLY FROM OTHER SOURCE                     |1           |
+|PYRO_MSG_SNIPPET                                                                                    |REMARKS                            |RECORD_COUNT|
+|----------------------------------------------------------------------------------------------------|-----------------------------------|------------|
+|<NULL>                                                                                              |FRC DONE MANUALLY FROM OTHER SOURCE|22,079      |
+|3906172244~2~Your Recharge request for 8141075569 has been registered on 14/08/2025 at 05:14:02 AM.P|FRC SUCCESS                        |1           |
+|7426311830~2~Your request has been sent to BSNL. If you do not receive a confirmation message please|FRC SUCCESS                        |1           |
+|7674276844~2~Your request has been sent to BSNL. If you do not receive a confirmation message please|FRC SUCCESS                        |1           |
+|4077167349~2~Your Recharge request for 6268402782 has been registered on 30/05/2026 at 11:35:56 PM.P|FRC SUCCESS                        |1           |
+|4024091741~2~Your Recharge request for 9175727404 has been registered on 27/02/2026 at 05:19:45 AM.P|FRC SUCCESS                        |1           |
+|6938823261~2~Your request has been sent to BSNL. If you do not receive a confirmation message please|FRC SUCCESS                        |1           |
+|7648650639~2~Your request has been sent to BSNL. If you do not receive a confirmation message please|FRC SUCCESS                        |1           |
+|7642740605~2~Your request has been sent to BSNL. If you do not receive a confirmation message please|FRC SUCCESS                        |1           |
+|PUSH_REMARKS                       |FRCSTATUS|RECORD_COUNT|
+|-----------------------------------|---------|------------|
+|Inserted by FrcActivationPushFlowV2|P        |164,781     |
+|Inserted by FrcActivationPushFlowV2|R        |39,096      |
+|Inserted by FrcActivationPushFlowV2|Y        |22,087      |
+|Inserted by FrcActivationPushFlowV2|S        |5,198       |
+|Inserted by FrcActivationPushFlowV2|<NULL>   |1,711       |
+|Inserted by FrcActivationPushFlowV2|F        |1,435       |
+|Inserted by FrcActivationPushFlowV2|D        |423         |
+|REQID    |GSMNO     |CAF_SERIAL_NO|EDATE                  |PYRO_DATE              |SS_DATE                |FRCSTATUS|PYRO_STATUS|SS_STATUS|TRANSACTIONID|REMARKS                            |PUSH_REMARKS                       |MSG_AFTERREQ_SNIP                                                               |RN |
+|---------|----------|-------------|-----------------------|-----------------------|-----------------------|---------|-----------|---------|-------------|-----------------------------------|-----------------------------------|--------------------------------------------------------------------------------|---|
+|4,145,370|9435328104|BEC5563558   |2026-09-19 13:47:14.000|                       |2026-09-19 14:31:54.000|Y        |           |R        |             |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|                                                                                |1  |
+|4,145,472|8900463077|BEC5559164   |2026-09-19 13:46:45.000|                       |2026-09-19 14:31:58.000|Y        |           |R        |             |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|                                                                                |2  |
+|4,145,397|9436893561|BEC5549260   |2026-09-19 13:46:33.000|                       |2026-09-19 14:31:55.000|Y        |           |R        |             |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|                                                                                |3  |
+|4,145,385|9838919671|BEC5342038   |2026-09-19 12:33:17.000|2025-11-09 02:25:52.000|2026-09-19 14:07:14.000|Y        |P1         |PC       |426,311,830  |FRC SUCCESS                        |Inserted by FrcActivationPushFlowV2|7426311830~2~Your request has been sent to BSNL. If you do not receive a confirm|1  |
+|4,090,399|9783856450|BEC5335187   |2026-09-17 23:47:52.000|2024-08-30 03:46:14.000|2026-09-18 01:36:53.000|Y        |P1         |PC       |938,823,261  |FRC SUCCESS                        |Inserted by FrcActivationPushFlowV2|6938823261~2~Your request has been sent to BSNL. If you do not receive a confirm|2  |
+|4,089,575|9175727404|BEC5341177   |2026-09-17 22:10:42.000|2026-02-27 05:19:45.000|2026-09-18 01:13:41.000|Y        |P1         |PC       |             |FRC SUCCESS                        |Inserted by FrcActivationPushFlowV2|4024091741~2~Your Recharge request for 9175727404 has been registered on 27/02/2|3  |

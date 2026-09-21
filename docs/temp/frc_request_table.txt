@@ -1,0 +1,411 @@
+|COLUMN_ID|COLUMN_NAME    |DATA_TYPE                  |DATA_LENGTH|NULLABLE|
+|---------|---------------|---------------------------|-----------|--------|
+|1        |ID             |RAW                        |16         |N       |
+|2        |VENDORID       |VARCHAR2                   |50         |Y       |
+|3        |VENDORMSISDN   |VARCHAR2                   |10         |Y       |
+|4        |REQID          |NUMBER                     |22         |N       |
+|5        |GSMNO          |VARCHAR2                   |10         |Y       |
+|6        |REQDATE        |DATE                       |7          |Y       |
+|7        |MPIN           |VARCHAR2                   |100        |Y       |
+|8        |FRCAMT         |NUMBER                     |22         |Y       |
+|9        |CSCCODE        |VARCHAR2                   |50         |Y       |
+|10       |EDATE          |DATE                       |7          |Y       |
+|11       |IN_STATUS      |VARCHAR2                   |3          |Y       |
+|12       |IN_DATE        |DATE                       |7          |Y       |
+|13       |PYRO_STATUS    |VARCHAR2                   |3          |Y       |
+|14       |PYRO_DATE      |DATE                       |7          |Y       |
+|15       |SS_STATUS      |VARCHAR2                   |3          |Y       |
+|16       |SS_DATE        |DATE                       |7          |Y       |
+|17       |VAS_TRANS_ID   |NUMBER                     |22         |Y       |
+|18       |TRANSACTIONID  |NUMBER                     |22         |Y       |
+|19       |SOURCE_MSISDN  |VARCHAR2                   |10         |Y       |
+|20       |DEST_MSISDN    |VARCHAR2                   |10         |Y       |
+|21       |DENOMINATION   |NUMBER                     |22         |Y       |
+|22       |FINAL_STATUS   |VARCHAR2                   |3          |Y       |
+|23       |RECORDID       |NUMBER                     |22         |Y       |
+|24       |REMARKS        |VARCHAR2                   |100        |Y       |
+|25       |PYRO_TRANS_ID  |NUMBER                     |22         |Y       |
+|26       |MSG_AFTERREQ   |VARCHAR2                   |500        |Y       |
+|27       |MSG_AFTERTR    |VARCHAR2                   |500        |Y       |
+|28       |REFID          |NUMBER                     |22         |Y       |
+|29       |CIRCLE_CODE    |NUMBER                     |22         |Y       |
+|30       |MSG2PYRO       |VARCHAR2                   |500        |Y       |
+|31       |OTPMSG         |VARCHAR2                   |100        |Y       |
+|32       |REPLYMSG       |VARCHAR2                   |100        |Y       |
+|33       |REPLYRECVD_DATE|DATE                       |7          |Y       |
+|34       |FRCSTATUS      |VARCHAR2                   |1          |Y       |
+|35       |FRCDATE        |DATE                       |7          |Y       |
+|36       |IPDETAIL       |VARCHAR2                   |20         |Y       |
+|37       |PYRO_FINAL_DATE|DATE                       |7          |Y       |
+|38       |SELLER_COMM    |NUMBER                     |22         |Y       |
+|39       |FRA_COMM       |NUMBER                     |22         |Y       |
+|40       |MPIN_LENGTH    |NUMBER                     |22         |Y       |
+|41       |PUSH_FLAG      |VARCHAR2                   |10         |Y       |
+|42       |PUSH_REMARKS   |VARCHAR2                   |200        |Y       |
+|43       |PUSH_DATE      |DATE                       |7          |Y       |
+|44       |CAF_SERIAL_NO  |VARCHAR2                   |30         |N       |
+|45       |UPDATED_TS     |TIMESTAMP(6) WITH TIME ZONE|13         |N       |
+|ID                      |VENDORID        |VENDORMSISDN|REQID    |GSMNO     |REQDATE                |MPIN        |FRCAMT|CSCCODE   |EDATE                  |IN_STATUS|IN_DATE|PYRO_STATUS|PYRO_DATE              |SS_STATUS|SS_DATE                |VAS_TRANS_ID|TRANSACTIONID|SOURCE_MSISDN|DEST_MSISDN|DENOMINATION|FINAL_STATUS|RECORDID|REMARKS|PYRO_TRANS_ID|MSG_AFTERREQ                                                                                                                                   |MSG_AFTERTR|REFID|CIRCLE_CODE|MSG2PYRO                                                                                                                                                                                                                                                                                                                                                |OTPMSG|REPLYMSG|REPLYRECVD_DATE|FRCSTATUS|FRCDATE|IPDETAIL|PYRO_FINAL_DATE|SELLER_COMM|FRA_COMM|MPIN_LENGTH|PUSH_FLAG|PUSH_REMARKS                       |PUSH_DATE              |CAF_SERIAL_NO|UPDATED_TS                   |
+|------------------------|----------------|------------|---------|----------|-----------------------|------------|------|----------|-----------------------|---------|-------|-----------|-----------------------|---------|-----------------------|------------|-------------|-------------|-----------|------------|------------|--------|-------|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------|-----------|-----|-----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------|--------|---------------|---------|-------|--------|---------------|-----------|--------|-----------|---------|-----------------------------------|-----------------------|-------------|-----------------------------|
+|[BLOB[[p���ra��e�$\u0011�u�]]|31291971REKHOSHI|9425926477  |4,094,125|7869853873|2026-09-15 06:44:27.000|fnfkw0mdHNk=|1     |MP24400002|2026-09-18 00:00:16.000|C        |       |P1         |2026-09-18 04:33:59.000|P1       |2026-09-18 04:43:25.000|            |129,766,194  |             |           |            |            |        |       |             |4129766194~2~Your Recharge request for 7869853873 has been registered on 18/09/2026 at 04:33:59 AM.Please await confirmation  Ref No.4129766194|           |     |4          |<?xml version="1.0" encoding="UTF-8" standalone="yes"?><vasstvRequest><TransType>5</TransType><user>BSNL</user><pass>123456</pass><VendorId>31291971REKHOSHI</VendorId><VendorMsisdn>9425926477</VendorMsisdn><ReqId>4094125</ReqId><ENCRYPTED>1</ENCRYPTED><MSG>~rtopup~7869853873~1~111213</MSG><transactionid>4094125</transactionid></vasstvRequest>|      |        |               |P        |       |        |               |           |        |6          |C        |Inserted by FrcActivationPushFlowV2|2026-09-18 03:47:31.000|BEC5377761   |2026-09-17 23:12:33.096 +0000|
+|IN_STATUS|PUSH_FLAG|PYRO_STATUS|SS_STATUS|FINAL_STATUS|FRC_STATUS|RECORD_COUNT|EARLIEST_PUSH          |LATEST_PYRO_TIME       |
+|---------|---------|-----------|---------|------------|----------|------------|-----------------------|-----------------------|
+|C        |C        |P1         |P1       |NULL        |P         |27,406      |2026-09-18 00:15:26.000|2026-09-19 07:16:54.000|
+|C        |C        |P1         |P1       |NULL        |R         |7,060       |2026-09-18 00:19:11.000|2026-09-19 07:13:12.000|
+|C        |C        |NULL       |R        |NULL        |Y         |3,176       |2026-09-18 00:21:45.000|2026-09-19 05:08:03.000|
+|C        |C        |P1         |P1       |NULL        |S         |767         |2026-09-18 00:19:13.000|2026-09-19 05:14:23.000|
+|C        |C        |P1         |P1       |NULL        |F         |303         |2026-09-18 00:20:13.000|2026-09-19 05:14:19.000|
+|C        |C        |P1         |R        |NULL        |R         |12          |2026-09-18 05:25:02.000|2026-09-19 00:04:16.000|
+|C        |N        |N          |N        |NULL        |NULL      |12          |2026-09-18 01:53:59.000|                       |
+|C        |C        |NULL       |R        |NULL        |D         |7           |2026-09-18 02:06:55.000|                       |
+|C        |Y        |N          |N        |NULL        |NULL      |4           |2026-09-18 23:27:44.000|                       |
+|ACTIVATION_DATE        |TOTAL_REQUESTS|SUCCESS_RECHARGES|REGISTERED_P1_IN_PROCESS|STAGED_UNSUBMITTED|FAILED_RECHARGES|
+|-----------------------|--------------|-----------------|------------------------|------------------|----------------|
+|2026-11-03 00:00:00.000|1             |0                |1                       |0                 |0               |
+|2026-09-19 00:00:00.000|11,542        |50               |7,577                   |733               |13              |
+|2026-09-18 00:00:00.000|38,747        |767              |35,548                  |3,183             |303             |
+|2026-09-17 00:00:00.000|38,276        |1,186            |34,796                  |3,471             |436             |
+|2026-09-16 00:00:00.000|34,780        |554              |31,560                  |3,203             |114             |
+|2026-09-15 00:00:00.000|31,277        |934              |28,065                  |3,205             |234             |
+|2026-09-14 00:00:00.000|17,342        |177              |15,048                  |2,291             |46              |
+|REQID    |GSMNO     |CAF_SERIAL_NO|EDATE                  |PUSH_DATE              |PYRO_DATE              |SS_DATE                |REPLYRECVD_DATE|IN_STATUS|PUSH_FLAG|PYRO_STATUS|SS_STATUS|FINAL_STATUS|FRCSTATUS|TRANSACTIONID|REPLY_MSG|MSG_AFTER_REQ                                                                   |MSG_AFTER_TR|
+|---------|----------|-------------|-----------------------|-----------------------|-----------------------|-----------------------|---------------|---------|---------|-----------|---------|------------|---------|-------------|---------|--------------------------------------------------------------------------------|------------|
+|4,133,995|7625860659|BEC5506791   |2026-09-19 10:04:55.000|2026-09-19 10:26:05.000|2026-09-19 10:36:44.000|2026-09-19 10:37:03.000|               |C        |C        |P1         |P1       |            |S        |692,160,409  |         |7692160409~2~Your request has been sent to BSNL. If you do not receive a confirm|            |
+|4,133,988|7589154090|BEC5509088   |2026-09-19 10:05:56.000|2026-09-19 10:25:59.000|2026-09-19 10:36:45.000|2026-09-19 10:37:03.000|               |C        |C        |P1         |P1       |            |S        |692,160,419  |         |7692160419~2~Your request has been sent to BSNL. If you do not receive a confirm|            |
+|4,133,936|9464220247|BEC5506932   |2026-09-19 10:06:13.000|2026-09-19 10:25:26.000|2026-09-19 10:36:46.000|2026-09-19 10:37:03.000|               |C        |C        |P1         |P1       |            |S        |692,160,424  |         |7692160424~2~Your request has been sent to BSNL. If you do not receive a confirm|            |
+|4,133,922|9464769484|BEC5539348   |2026-09-19 10:06:07.000|2026-09-19 10:25:18.000|2026-09-19 10:36:46.000|2026-09-19 10:37:03.000|               |C        |C        |P1         |P1       |            |S        |692,160,430  |         |7692160430~2~Your request has been sent to BSNL. If you do not receive a confirm|            |
+|4,133,903|9411308939|BEC5542988   |2026-09-19 10:04:19.000|2026-09-19 10:25:01.000|2026-09-19 10:36:48.000|2026-09-19 10:37:04.000|               |C        |C        |P1         |P1       |            |F        |             |         |9994133903~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT    |            |
+|FINAL_STATUS|FRC_STATUS|CALLBACK_REPLY_MSG|OCCURRENCE_COUNT|
+|------------|----------|------------------|----------------|
+|FRCSTATUS|REQID    |GSMNO     |PYRO_STATUS|SS_STATUS|TRANSACTIONID|PYRO_DATE              |SS_DATE                |MSG_AFTER_REQ                                                         |REMARKS                            |PUSH_REMARKS                       |RN |
+|---------|---------|----------|-----------|---------|-------------|-----------------------|-----------------------|----------------------------------------------------------------------|-----------------------------------|-----------------------------------|---|
+|D        |4,133,731|7380256890|           |R        |             |                       |2026-09-19 10:37:03.000|                                                                      |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|1  |
+|D        |4,133,571|9532746242|           |R        |             |                       |2026-09-19 10:37:04.000|                                                                      |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|2  |
+|F        |4,133,903|9411308939|P1         |P1       |             |2026-09-19 10:36:48.000|2026-09-19 10:37:04.000|9994133903~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER  |                                   |Inserted by FrcActivationPushFlowV2|1  |
+|F        |4,133,901|9530794629|P1         |P1       |             |2026-09-19 10:36:44.000|2026-09-19 10:37:03.000|9994133901~1~Sorry, Your account is suspended or inactive. Please cont|                                   |Inserted by FrcActivationPushFlowV2|2  |
+|P        |4,138,727|9407695368|P1         |P1       |130,429,962  |2026-09-19 12:36:43.000|2026-09-19 12:45:04.000|4130429962~2~Your Recharge request for 9407695368 has been registered |                                   |Inserted by FrcActivationPushFlowV2|1  |
+|P        |4,138,724|9407784139|P1         |P1       |130,429,969  |2026-09-19 12:36:44.000|2026-09-19 12:45:04.000|4130429969~2~Your Recharge request for 9407784139 has been registered |                                   |Inserted by FrcActivationPushFlowV2|2  |
+|R        |4,138,766|9409694784|P1         |P1       |             |2026-09-19 12:35:29.000|2026-09-19 12:45:05.000|9994138766~1~Sorry, your transfer failed due to insufficient funds in |                                   |Inserted by FrcActivationPushFlowV2|1  |
+|R        |4,138,718|7647813214|P1         |P1       |             |2026-09-19 12:34:52.000|2026-09-19 12:45:03.000|9994138718~1~Sorry, Your account is suspended or inactive. Please cont|                                   |Inserted by FrcActivationPushFlowV2|2  |
+|S        |4,133,995|7625860659|P1         |P1       |692,160,409  |2026-09-19 10:36:44.000|2026-09-19 10:37:03.000|7692160409~2~Your request has been sent to BSNL. If you do not receive|                                   |Inserted by FrcActivationPushFlowV2|1  |
+|S        |4,133,988|7589154090|P1         |P1       |692,160,419  |2026-09-19 10:36:45.000|2026-09-19 10:37:03.000|7692160419~2~Your request has been sent to BSNL. If you do not receive|                                   |Inserted by FrcActivationPushFlowV2|2  |
+|Y        |4,138,725|9407785948|           |R        |             |                       |2026-09-19 12:45:04.000|                                                                      |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|1  |
+|Y        |4,138,723|9407748381|           |R        |             |                       |2026-09-19 12:45:04.000|                                                                      |FRC DONE MANUALLY FROM OTHER SOURCE|Inserted by FrcActivationPushFlowV2|2  |
+|PYRO_ERROR_MESSAGE                                                                        |COUNT|
+|------------------------------------------------------------------------------------------|-----|
+|9994129139~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091963~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091482~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994091205~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092355~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994090409~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091642~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091658~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091223~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091783~1~SORRY , YOU ARE BLOCKED NOW TO DO ANY TRANSACTION , PLEASE CONTACT TO BSNL PE|1    |
+|9994091887~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091788~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994093077~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093167~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994090289~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091815~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092022~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093388~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994091824~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994090066~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092047~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090616~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127822~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127899~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994129284~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129082~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127571~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127853~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127862~1~WRONG MPIN, YOU HAVE LEFT WITH 2 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127895~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129300~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127972~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126972~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127683~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127981~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127940~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994133572~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091452~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091389~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6913|1    |
+|9994091967~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093168~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127023~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091576~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093204~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091600~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092004~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091645~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091664~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092017~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092828~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994088358~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091712~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092886~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091768~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994092891~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091739~1~WRONG MPIN, YOU HAVE LEFT WITH 2 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091696~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994090245~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091722~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090258~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092075~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091770~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093445~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093459~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994090813~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093539~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091874~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091884~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6913|1    |
+|9994127296~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127048~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129150~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127581~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127958~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127085~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994127074~1~WRONG MPIN, YOU HAVE LEFT WITH 1 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127081~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127574~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127348~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994133901~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994128962~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091484~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129143~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126885~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091502~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126835~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994126790~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126866~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093191~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091618~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093665~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994091734~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090638~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994092050~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091265~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093677~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994089033~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091787~1~WRONG MPIN, YOU HAVE LEFT WITH 1 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091785~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994091880~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092982~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091342~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090269~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091549~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6913|1    |
+|9994091225~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093538~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091989~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091359~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994129712~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994127510~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994127611~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994129113~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127044~1~SORRY , YOU ARE BLOCKED NOW TO DO ANY TRANSACTION , PLEASE CONTACT TO BSNL PE|1    |
+|9994129723~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994127883~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127317~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127796~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126855~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129306~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126854~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994128006~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994130288~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129134~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091523~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127020~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091499~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994088002~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091206~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091558~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091267~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091661~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994091670~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994093662~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092028~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994092848~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994090233~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091713~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.6|1    |
+|9994091870~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091323~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091809~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090443~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091907~1~WRONG MPIN, YOU HAVE LEFT WITH 2 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091854~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093482~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093049~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093517~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091802~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.6|1    |
+|9994091877~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129129~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093563~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127548~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093589~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127066~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994128368~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994127813~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127068~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994130052~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER RIGHT MPIN .         |1    |
+|9994126954~1~WRONG MPIN, YOU HAVE LEFT WITH 2 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127095~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129141~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127605~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127043~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127601~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129066~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093219~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091630~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092839~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091764~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093663~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994091707~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091796~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092911~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093373~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091867~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994091705~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091820~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994090644~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091332~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093000~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091929~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090259~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093091~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994092369~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994128940~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091968~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092092~1~WRONG MPIN, YOU HAVE LEFT WITH 2 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091586~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093425~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091956~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093594~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092051~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090203~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127830~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126875~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994127835~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126976~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994127957~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127890~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127908~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127658~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994127338~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994129174~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091478~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091200~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091177~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091995~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093239~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092788~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091689~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091246~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091637~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994090635~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091263~1~WRONG MPIN, YOU HAVE LEFT WITH 2 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091479~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091756~1~WRONG MPIN, YOU HAVE LEFT WITH 1 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090332~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994090213~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994092933~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994088942~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994090160~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093477~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994089069~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093094~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091892~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091950~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093516~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091596~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6913|1    |
+|9994091444~1~WRONG MPIN, YOU HAVE LEFT WITH 3 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093534~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091811~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994091462~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092002~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093383~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994129072~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127029~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994129791~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994127554~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127697~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994129108~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129301~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129158~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127902~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.6|1    |
+|9994127904~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127089~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994130291~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994130294~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994133903~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091492~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091460~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127662~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994093234~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091582~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091605~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091573~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091632~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091307~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091273~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091778~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994092065~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994090343~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091755~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093457~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093508~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093135~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093210~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091986~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994092088~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093335~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093547~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093377~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994090610~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994126870~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994092058~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090615~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093596~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994129044~1~WRONG MPIN, YOU HAVE LEFT WITH 1 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126871~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994129110~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994129753~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994127718~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127794~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127165~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994130313~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994130317~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994133556~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994129131~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994126865~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091426~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127542~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994090120~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091509~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091226~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091233~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091686~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091692~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994091624~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994092859~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994091728~1~WRONG MPIN, YOU HAVE LEFT WITH 1 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092927~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994092929~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994090748~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994088884~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093421~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091319~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994092069~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6913|1    |
+|9994090264~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994093028~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994093552~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.9|1    |
+|9994091793~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994126751~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994093685~1~Sorry, You have entered an invalid mPIN. please check and try again. Ref No.0|1    |
+|9994127937~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127045~1~Sorry, You have insufficient stock to complete this transaction. Your current|1    |
+|9994127869~1~WRONG MPIN, YOU HAVE LEFT WITH 4 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
+|9994127061~1~Sorry, Your account is suspended or inactive. Please contact Customer Care. R|1    |
+|9994127086~1~You are not Authorised to Use the Service, Please contact to BSNL Ref No.6920|1    |
+|9994127582~1~WRONG MPIN, YOU HAVE LEFT WITH 5 MORE ATTEMPTS TO ENTER   RIGHT              |1    |
