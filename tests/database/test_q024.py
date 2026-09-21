@@ -184,14 +184,13 @@ class TestQ024ProcessorZonewiseAndAbortRecovery:
         mock_release.assert_called_once_with([501, 502])
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_failed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
     @patch("app.processor.async_release_unprocessed_claims")
     @patch("app.processor.async_fetch_pending_rows")
     async def test_processor_releases_unsubmitted_rows_on_batch_abort(
-        self, mock_fetch, mock_release, mock_token_mgr, mock_recharge, mock_mark_failed, mock_update_bcd
+        self, mock_fetch, mock_release, mock_token_mgr, mock_recharge, mock_mark_failed
     ):
         """When a batch aborts mid-way (e.g. token invalid 506 on row 1), remaining rows are released."""
         claimed_batch = [

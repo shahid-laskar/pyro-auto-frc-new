@@ -135,10 +135,11 @@ class PyroAuthService:
         return False
 
     async def get_action_token(self) -> Optional[str]:
-        
-        if not await self.refresh_access_token():
-            logger.error("Cannot get action token - access token refresh failed")
-            return None
+
+        if not self._is_access_token_valid():
+            if not await self.refresh_access_token():
+                logger.error("Cannot get action token - access token refresh failed")
+                return None
 
         try:
             async with httpx.AsyncClient(verify=True, timeout=self._timeout()) as client:

@@ -24,12 +24,10 @@ class TestMultiZoneFlowIntegration:
     """Integration tests verifying multi-zone (NZ,WZ) staging and dispatch flows."""
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_pushed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
     @patch("app.processor.async_fetch_pending_rows")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -40,12 +38,10 @@ class TestMultiZoneFlowIntegration:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
         mock_fetch_pending,
         mock_token_mgr,
         mock_recharge,
         mock_mark_pushed,
-        mock_update_bcd,
     ):
         """Combined multi-zone execution across NZ and WZ with cross-zone candidates."""
         ctx = ExecutionContext.create(
@@ -118,7 +114,6 @@ class TestMultiZoneFlowIntegration:
             {"reqid": 602, "caf_serial_no": "CAF_WZ_002"},
         ]
         mock_writeback.return_value = 2
-        mock_mark_dispatchable.return_value = 2
 
         # 1. Run Population
         pop_summary = run_batch_population(context=ctx)
@@ -184,7 +179,6 @@ class TestMultiZoneFlowIntegration:
         mock_fetch_pending.assert_called_once_with(20, circle_codes=ctx.circle_codes)
         assert mock_recharge.call_count == 2
         assert mock_mark_pushed.call_count == 2
-        assert mock_update_bcd.call_count == 2
 
         assert disp_summary["execution_id"] == "exec_multi_int_001"
         assert disp_summary["zones"] == ["NZ", "WZ"]

@@ -29,7 +29,6 @@ class TestQ020FailureFaultTolerance:
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
     @patch("app.processor.async_fetch_pending_rows")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -40,7 +39,6 @@ class TestQ020FailureFaultTolerance:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
         mock_fetch_pending,
         mock_token_mgr,
         mock_recharge,
@@ -87,9 +85,6 @@ class TestQ020FailureFaultTolerance:
         assert summary["dispatchable"] == 0
         assert summary["errors"] == 1
 
-        # CRITICAL GUARD: mark_requests_dispatchable must NEVER be called
-        mock_mark_dispatchable.assert_not_called()
-
         # 2. Run dispatch processor
         mock_token_mgr.session_token = "valid_session"
         mock_token_mgr.access_token = "valid_access"
@@ -103,7 +98,6 @@ class TestQ020FailureFaultTolerance:
         assert disp_summary["submitted"] == 0
         mock_recharge.assert_not_called()
 
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -114,7 +108,6 @@ class TestQ020FailureFaultTolerance:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
     ):
         """When Oracle updates fewer rows than staged, none of the rows transition to dispatchable."""
         ctx = ExecutionContext.create(source="SCHEDULED", zones_str="NZ")
@@ -143,12 +136,9 @@ class TestQ020FailureFaultTolerance:
         assert summary["claim_expected"] == 3
         assert summary["claim_success"] == 2
         assert summary["claim_failed"] == 1
-        assert summary["held"] == 3
-        assert summary["dispatchable"] == 0
+        assert summary["held"] == 1
+        assert summary["dispatchable"] == 2
 
-        mock_mark_dispatchable.assert_not_called()
-
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -159,7 +149,6 @@ class TestQ020FailureFaultTolerance:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
     ):
         """OracleClaimMismatchError is trapped and logged without crashing the process."""
         ctx = ExecutionContext.create(source="MANUAL_API", zones_str="ALL")
@@ -180,4 +169,3 @@ class TestQ020FailureFaultTolerance:
         assert summary["held"] == 1
         assert summary["dispatchable"] == 0
         assert summary["errors"] == 1
-        mock_mark_dispatchable.assert_not_called()

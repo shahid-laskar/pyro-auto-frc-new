@@ -20,7 +20,6 @@ class TestDispatchConcurrency:
     """Test suite for concurrent dispatch workers and FOR UPDATE SKIP LOCKED isolation."""
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_pushed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
@@ -31,7 +30,6 @@ class TestDispatchConcurrency:
         mock_token_mgr,
         mock_recharge,
         mock_mark_pushed,
-        mock_update_bcd,
     ):
         """Two concurrent workers claim distinct, non-overlapping sets of requests."""
         mock_token_mgr.session_token = "valid_session"

@@ -385,7 +385,7 @@ def fetch_cos_bcd_for_gsms(
 
 @_pg_retry
 def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
-    
+
     if not rows:
         return []
 
@@ -395,7 +395,7 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
             edate, reqdate,
             frc_plan_name, frc_plan_code, frc_category_code, frcamt,
             ctopup_number, vendormsisdn, vendorid,
-            mpin, mpin_length,max_retries,
+            mpin, mpin_length, max_retries,
             kyc_mode,
             in_status, pyro_status, push_flag,
             batch_date, created_at
@@ -406,7 +406,7 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
             %(ctopup_number)s, %(vendormsisdn)s, %(vendorid)s,
             %(mpin)s, %(mpin_length)s, %(max_retries)s,
             %(kyc_mode)s,
-            'S', 'N', 'N',
+            'C', 'N', 'N',
             CURRENT_DATE, CURRENT_TIMESTAMP
         )
         ON CONFLICT (batch_date, caf_serial_no) DO NOTHING
@@ -427,130 +427,10 @@ def bulk_insert_frc_requests(rows: List[dict]) -> List[dict]:
                         "circle_code":   result[3] if len(result) > 3 else row.get("circle_code"),
                     })
 
-    logger.info("Postgres: inserted %d/%d rows into frc_pyro_request_data (staged, in_status='S')",
+    logger.info("Postgres: inserted %d/%d rows into frc_pyro_request_data (in_status='C', directly dispatchable)",
                 len(inserted_pairs), len(rows))
     return inserted_pairs
 
-
-@_pg_retry
-def mark_requests_dispatchable(reqids: Sequence[int]) -> int:
-    """Advance staged requests from 'S' (Staged) to 'C' (Confirmed/Dispatchable).
-
-    This function must be called only after the corresponding Oracle BCD claim
-    (Q020) has successfully written back. Once marked with in_status='C',
-    the requests become eligible for pickup by fetch_pending_rows.
-
-    Parameters
-    ----------
-    reqids : Sequence[int]
-        Collection of frc_pyro_request_data.reqid values to confirm.
-
-    Returns
-    -------
-    int
-        Number of requests updated to in_status='C'.
-    """
-    if not reqids:
-        return 0
-
-    unique_reqids = list(set(int(r) for r in reqids))
-    sql = """
-        UPDATE public.frc_pyro_request_data
-        SET
-            in_status  = 'C',
-            updated_ts = CURRENT_TIMESTAMP
-        WHERE reqid = ANY(%(reqids)s)
-          AND in_status = 'S'
-    """
-    with get_pg_write_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, {"reqids": unique_reqids})
-            updated = cur.rowcount
-
-    logger.info(
-        "Postgres: marked %d/%d requests dispatchable (in_status='C')",
-        updated, len(unique_reqids),
-    )
-    return updated
-
-
-@_pg_retry
-def mark_requests_staging_failed(reqids: Sequence[int], reason: str = "Oracle claim failed") -> int:
-    """Transition staged requests from 'S' (Staged) to 'F' (Failed).
-
-    Used when an Oracle claim attempt fails unrecoverably, ensuring
-    staged requests do not remain indefinitely in non-dispatchable limbo.
-
-    Parameters
-    ----------
-    reqids : Sequence[int]
-        Collection of frc_pyro_request_data.reqid values to mark failed.
-    reason : str
-        Failure explanation recorded in push_remarks and last_error_msg.
-
-    Returns
-    -------
-    int
-        Number of requests marked failed.
-    """
-    if not reqids:
-        return 0
-
-    unique_reqids = list(set(int(r) for r in reqids))
-    sql = """
-        UPDATE public.frc_pyro_request_data
-        SET
-            in_status      = 'F',
-            push_flag      = 'F',
-            final_status   = 'FAILED',
-            push_remarks   = %(reason)s,
-            last_error_msg = %(reason)s,
-            completed_at   = CURRENT_TIMESTAMP,
-            updated_ts     = CURRENT_TIMESTAMP
-        WHERE reqid = ANY(%(reqids)s)
-          AND in_status = 'S'
-    """
-    with get_pg_write_conn() as conn:
-        with conn.cursor() as cur:
-            cur.execute(sql, {"reqids": unique_reqids, "reason": reason[:200]})
-            updated = cur.rowcount
-
-    logger.warning(
-        "Postgres: marked %d/%d requests staging failed (in_status='F'): %s",
-        updated, len(unique_reqids), reason,
-    )
-    return updated
-
-
-@_pg_retry
-def fetch_staged_unconfirmed_requests(limit: int = 500) -> List[dict]:
-    """Fetch requests in staged state ('S') that are pending Oracle claim confirmation.
-
-    These requests are NOT dispatchable by the recharge processor until
-    their Oracle claim is confirmed (transitioning in_status to 'C').
-
-    Parameters
-    ----------
-    limit : int
-        Maximum number of staged requests to fetch.
-
-    Returns
-    -------
-    List[dict]
-        List of dictionaries with reqid, caf_serial_no, gsmno, circle_code, batch_date, created_at.
-    """
-    sql = """
-        SELECT
-            reqid, caf_serial_no, gsmno, circle_code, batch_date, created_at
-        FROM public.frc_pyro_request_data
-        WHERE in_status = 'S'
-        ORDER BY created_at ASC
-        LIMIT %s
-    """
-    with get_pg_write_conn() as conn:
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql, (limit,))
-            return [dict(r) for r in cur.fetchall()]
 
 
 # ── Recharge state machine ─────────────────────────────────────────────────────
@@ -703,17 +583,18 @@ def mark_as_success(reqid: int, response_text: str,balance_before: float,
             cur.execute(sql, (final_statuscode, balance_before,balance_after, response_text, reqid))
 
 @_pg_retry
-def mark_as_failed(reqid: int, push_flag: str, remarks: str,
+def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
                    response_text: Optional[str] = None,
                    final_statuscode: Optional[int] = None) -> None:
     is_permanent = (push_flag == FLAG_FAILED)
     client_txn_id = str(reqid).zfill(5)[:15]
+    # Truncate last_error_msg to column limit (500 chars) if provided
+    error_msg = pyro_msg[:500] if pyro_msg else None
     sql = """
         UPDATE public.frc_pyro_request_data
         SET
             client_txn_id           = COALESCE(client_txn_id, %s),
             push_flag               = %s,
-            push_remarks            = %s,
             last_error_msg          = %s,
             msg_afterreq            = COALESCE(%s, msg_afterreq),
             retry_count             = CASE WHEN %s THEN retry_count ELSE retry_count + 1 END,
@@ -727,13 +608,13 @@ def mark_as_failed(reqid: int, push_flag: str, remarks: str,
     with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (
-                client_txn_id, push_flag, remarks[:200], remarks[:500], response_text,
+                client_txn_id, push_flag, error_msg, response_text,
                 is_permanent, is_permanent, final_statuscode,
                 is_permanent, is_permanent, reqid,
             ))
 
 @_pg_retry
-def fetch_pushed_rows_for_status_check() -> List[dict]:
+def fetch_pushed_rows_for_status_check(limit: int = 100) -> List[dict]:
     sql = """
         SELECT
             reqid, pyro_trans_id, client_txn_id,
@@ -745,10 +626,11 @@ def fetch_pushed_rows_for_status_check() -> List[dict]:
           AND push_date >= CURRENT_TIMESTAMP - INTERVAL '60 minutes'
           AND push_date <= CURRENT_TIMESTAMP - INTERVAL '2 minutes'
         ORDER BY push_date ASC
+        LIMIT %s
     """
     with get_pg_write_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            cur.execute(sql)
+            cur.execute(sql, (limit,))
             return [dict(r) for r in cur.fetchall()]
 
 @_pg_retry
@@ -830,16 +712,17 @@ async def async_mark_as_success(reqid, response_text, balance_before, balance_af
     await asyncio.to_thread(mark_as_success, reqid, response_text,
                             balance_before, balance_after, final_statuscode)
 
-async def async_mark_as_failed(reqid, push_flag, remarks,
+async def async_mark_as_failed(reqid, push_flag, pyro_msg,
                                 response_text=None, final_statuscode=None):
-    await asyncio.to_thread(mark_as_failed, reqid, push_flag, remarks,
+    await asyncio.to_thread(mark_as_failed, reqid, push_flag, pyro_msg,
                             response_text, final_statuscode)
 
 async def async_find_row_by_pyro_trans_id(pyro_trans_id):
     return await asyncio.to_thread(find_row_by_pyro_trans_id, pyro_trans_id)
 
-async def async_fetch_pushed_rows_for_status_check():
-    return await asyncio.to_thread(fetch_pushed_rows_for_status_check)
+async def async_fetch_pushed_rows_for_status_check(limit: int = 100):
+    return await asyncio.to_thread(fetch_pushed_rows_for_status_check, limit)
+
 
 async def async_update_status_check_attempt(reqid):
     await asyncio.to_thread(update_status_check_attempt, reqid)

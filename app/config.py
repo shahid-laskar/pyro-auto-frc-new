@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     status_check_max_attempts: int = 5
     # Recharge processing
     recharge_batch_size: int = 500
+    recharge_concurrency: int = 4            # Semaphore bound: 4 conservative, 8 target
+    status_check_batch_size: int = 100
     # Scheduler — auth
     scheduler_auth_hour: int = 0
     scheduler_auth_minute: int = 5

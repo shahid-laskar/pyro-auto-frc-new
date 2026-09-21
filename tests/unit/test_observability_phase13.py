@@ -24,14 +24,12 @@ class TestPopulationObservability:
     @patch("app.batch.populator.logger.info")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_population_summary_and_logging_with_context(
         self,
         mock_oracle,
         mock_pg,
-        mock_dispatchable,
         mock_writeback,
         mock_insert,
         mock_log_info,
@@ -86,7 +84,6 @@ class TestPopulationObservability:
             {"reqid": 102, "caf_serial_no": "CAF02"},
         ]
         mock_writeback.return_value = 2
-        mock_dispatchable.return_value = 2
 
         summary = run_batch_population(context=ctx)
 
@@ -121,11 +118,10 @@ class TestPopulationObservability:
 
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_population_summary_on_claim_failure_reports_held(
-        self, mock_oracle, mock_pg, mock_dispatchable, mock_writeback, mock_insert
+        self, mock_oracle, mock_pg, mock_writeback, mock_insert
     ):
         """When Oracle writeback fails, staged rows are reported as claim_failed and held."""
         ctx = ExecutionContext.create(source="MANUAL_API", zones_str="ALL")
@@ -163,8 +159,6 @@ class TestPopulationObservability:
         assert summary["claim_failed"] == 1
         assert summary["held"] == 1
         assert summary["dispatchable"] == 0
-        mock_dispatchable.assert_not_called()
-
 
 class TestDispatchObservability:
     @pytest.mark.asyncio
@@ -173,12 +167,10 @@ class TestDispatchObservability:
     @patch("app.processor.recharge")
     @patch("app.processor.async_mark_as_pushed")
     @patch("app.processor.async_mark_as_failed")
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_fetch_pending_rows")
     async def test_dispatch_summary_and_logging_with_context(
         self,
         mock_fetch,
-        mock_update_bcd,
         mock_mark_failed,
         mock_mark_pushed,
         mock_recharge,
@@ -300,12 +292,10 @@ class TestSecurityLoggingHygiene:
     @patch("app.processor.token_manager")
     @patch("app.processor.recharge")
     @patch("app.processor.async_mark_as_pushed")
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_fetch_pending_rows")
     async def test_no_sensitive_data_in_processor_logs(
         self,
         mock_fetch,
-        mock_update_bcd,
         mock_mark_pushed,
         mock_recharge,
         mock_token,

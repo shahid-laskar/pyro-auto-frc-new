@@ -13,7 +13,6 @@ from app.db.postgres import (
     fetch_cos_bcd_for_gsms,
     fetch_pending_rows,
     fetch_pushed_rows_for_status_check,
-    fetch_staged_unconfirmed_requests,
     find_row_by_pyro_trans_id,
     get_pg_read_conn,
     get_pg_write_conn,
@@ -21,8 +20,6 @@ from app.db.postgres import (
     mark_as_failed,
     mark_as_pushed,
     mark_as_success,
-    mark_requests_dispatchable,
-    mark_requests_staging_failed,
     population_advisory_lock,
     postgres_health,
     release_unprocessed_claims,
@@ -202,38 +199,6 @@ class TestConnectionRouting:
         mock_write_conn.assert_called_once()
         mock_read_conn.assert_not_called()
 
-    @patch("app.db.postgres.get_pg_write_conn")
-    @patch("app.db.postgres.get_pg_read_conn")
-    def test_mark_requests_dispatchable_routes_to_write_pool_only(self, mock_read_conn, mock_write_conn):
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 1
-        mock_write_conn.side_effect = lambda: _mock_conn_cm(mock_cursor)
-
-        mark_requests_dispatchable([1, 2])
-        mock_write_conn.assert_called_once()
-        mock_read_conn.assert_not_called()
-
-    @patch("app.db.postgres.get_pg_write_conn")
-    @patch("app.db.postgres.get_pg_read_conn")
-    def test_mark_requests_staging_failed_routes_to_write_pool_only(self, mock_read_conn, mock_write_conn):
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 1
-        mock_write_conn.side_effect = lambda: _mock_conn_cm(mock_cursor)
-
-        mark_requests_staging_failed([1], "reason")
-        mock_write_conn.assert_called_once()
-        mock_read_conn.assert_not_called()
-
-    @patch("app.db.postgres.get_pg_write_conn")
-    @patch("app.db.postgres.get_pg_read_conn")
-    def test_fetch_staged_unconfirmed_requests_routes_to_write_pool_only(self, mock_read_conn, mock_write_conn):
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = []
-        mock_write_conn.side_effect = lambda: _mock_conn_cm(mock_cursor)
-
-        fetch_staged_unconfirmed_requests(limit=10)
-        mock_write_conn.assert_called_once()
-        mock_read_conn.assert_not_called()
 
     @patch("app.db.postgres.get_pg_write_conn")
     @patch("app.db.postgres.get_pg_read_conn")

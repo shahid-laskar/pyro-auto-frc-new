@@ -26,12 +26,10 @@ class TestNZFlowIntegration:
     """Integration tests verifying end-to-end single zone (NZ) processing."""
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_pushed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
     @patch("app.processor.async_fetch_pending_rows")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -42,12 +40,10 @@ class TestNZFlowIntegration:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
         mock_fetch_pending,
         mock_token_mgr,
         mock_recharge,
         mock_mark_pushed,
-        mock_update_bcd,
     ):
         """Complete end-to-end flow: NZ discovery -> staging -> claim -> dispatch -> Pyro submit."""
         # 1. Initialize context for NZ
@@ -121,7 +117,6 @@ class TestNZFlowIntegration:
         ]
         # 5. Mock Oracle Claim Writeback (Q020)
         mock_writeback.return_value = 2
-        mock_mark_dispatchable.return_value = 2
 
         # --- EXECUTE POPULATION ---
         pop_summary = run_batch_population(context=ctx)
@@ -145,7 +140,6 @@ class TestNZFlowIntegration:
             {"reqid": 501, "caf_serial_no": "CAF_NZ_001"},
             {"reqid": 502, "caf_serial_no": "CAF_NZ_002"},
         ])
-        mock_mark_dispatchable.assert_called_once_with([501, 502])
 
         # Assert Population Summary metrics
         assert pop_summary["execution_id"] == "exec_nz_int_001"
@@ -199,15 +193,10 @@ class TestNZFlowIntegration:
         assert recharge_kwargs["gsmno"] == "9412300001"
         assert recharge_kwargs["amount"] == 299
 
-        # Verify Postgres marked pushed and Oracle marked W
+        # Verify Postgres marked pushed
         mock_mark_pushed.assert_called_once()
         assert mock_mark_pushed.call_args[0][0] == 501
         assert mock_mark_pushed.call_args[0][1] == "PYRO_TXN_NZ_001"
-
-        mock_update_bcd.assert_called_once_with(
-            "CAF_NZ_001", 501, BCD_STATUS_W,
-            "FRC submitted to Pyro. pyroTxnId=PYRO_TXN_NZ_001"
-        )
 
         assert disp_summary["execution_id"] == "exec_nz_int_001"
         assert disp_summary["zones"] == ["NZ"]

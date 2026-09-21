@@ -1,6 +1,7 @@
 
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,9 +20,49 @@ logger = logging.getLogger(__name__)
 STATUS_SUCCESS    = 2000
 STATUS_REGISTERED = 2002
 
+# ── Shared persistent HTTP client ─────────────────────────────────────────────
+# One client for the lifetime of the process, with connection pooling.
+# Call init_http_client() at startup and close_http_client() at shutdown.
+_http_client: Optional[httpx.AsyncClient] = None
+
+
+def init_http_client() -> None:
+    """Create the shared httpx.AsyncClient. Call once at application startup."""
+    global _http_client
+    _http_client = httpx.AsyncClient(
+        verify=True,
+        timeout=httpx.Timeout(settings.pyro_request_timeout_seconds),
+        limits=httpx.Limits(
+            max_keepalive_connections=20,
+            max_connections=50,
+        ),
+    )
+    logger.info("Shared httpx client initialised (keepalive=20 max=50)")
+
+
+async def close_http_client() -> None:
+    """Close the shared httpx.AsyncClient. Call at application shutdown."""
+    global _http_client
+    if _http_client is not None:
+        await _http_client.aclose()
+        _http_client = None
+        logger.info("Shared httpx client closed")
+
+
+def _get_client() -> httpx.AsyncClient:
+    """Return the shared client, falling back to per-request mode if not initialised."""
+    if _http_client is not None:
+        return _http_client
+    # Fallback: create a throwaway client (only during tests or if startup skipped)
+    logger.warning("Shared httpx client not initialised — using per-request fallback")
+    return httpx.AsyncClient(
+        verify=True,
+        timeout=httpx.Timeout(settings.pyro_request_timeout_seconds),
+    )
+
 
 def _parse_pyro_response(resp: httpx.Response, label: str) -> dict:
-    
+
     raw = resp.text.strip()
     logger.debug("%s raw response: %s", label, raw[:200])
 
@@ -32,7 +73,7 @@ def _parse_pyro_response(resp: httpx.Response, label: str) -> dict:
 
     try:
         return resp.json()
-    
+
     except Exception as json_err:
         logger.error("%s: both plain JSON and decrypt failed. Raw: %s", label, raw[:300])
         return {
@@ -114,7 +155,7 @@ async def recharge(
     mpin:          str,
     attempt_no:    int = 1,
 ) -> dict:
-    
+
     client_txn_id = str(reqid).zfill(5)[:15]
     url           = f"{settings.pyro_base_url}/epin-vendor-api/recharge"
     started_at    = datetime.now(timezone.utc)
@@ -126,7 +167,7 @@ async def recharge(
         action_token = None
         logger.error("Failed to generate action token: %s", exc)
 
-    if not action_token:        
+    if not action_token:
         ended_at = datetime.now(timezone.utc)
         duration = int((ended_at - started_at).total_seconds() * 1000)
         data = {"statusCode": -1, "status": "ERROR",
@@ -158,9 +199,9 @@ async def recharge(
     }
     masked_headers = json.dumps({k: "***" for k in headers})
 
+    client = _get_client()
     try:
-        async with httpx.AsyncClient(verify=True, timeout=30.0) as client:
-            resp = await client.post(url, headers=headers, content=encrypted_body)
+        resp = await client.post(url, headers=headers, content=encrypted_body)
 
         ended_at    = datetime.now(timezone.utc)
         duration    = int((ended_at - started_at).total_seconds() * 1000)
@@ -232,9 +273,9 @@ async def check_transaction_status(
     headers        = {"apiKey": settings.pyro_api_key, "accessToken": access_token}
     masked_headers = json.dumps({"apiKey": "***", "accessToken": "***"})
 
+    client = _get_client()
     try:
-        async with httpx.AsyncClient(verify=True, timeout=30.0) as client:
-            resp = await client.post(url, headers=headers, content=encrypted_body)
+        resp = await client.post(url, headers=headers, content=encrypted_body)
 
         ended_at    = datetime.now(timezone.utc)
         duration    = int((ended_at - started_at).total_seconds() * 1000)

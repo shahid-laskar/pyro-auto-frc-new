@@ -234,13 +234,12 @@ class TestQ020ClaimVerificationAndIntegrity:
 class TestQ020PopulatorCrossDatabaseIntegration:
     """Test suite verifying populator behavior with hardened Q020 claim writeback."""
 
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_populator_passes_complete_identity_to_writeback(
-        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback, mock_dispatchable
+        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback
     ):
         """bulk_insert_frc_requests returns full identity and passes it to batch_writeback_bcd_rq."""
         mock_fetch_oracle.return_value = [
@@ -281,7 +280,6 @@ class TestQ020PopulatorCrossDatabaseIntegration:
             }
         ]
         mock_writeback.return_value = 1
-        mock_dispatchable.return_value = 1
 
         summary = run_batch_population()
 
@@ -291,17 +289,15 @@ class TestQ020PopulatorCrossDatabaseIntegration:
 
         # batch_writeback_bcd_rq received the pairs with complete identity
         mock_writeback.assert_called_once_with(mock_bulk_insert.return_value)
-        mock_dispatchable.assert_called_once_with([501])
 
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_populator_claim_mismatch_keeps_staged_requests_undispatchable(
-        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback, mock_dispatchable
+        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback
     ):
-        """When batch_writeback_bcd_rq raises OracleClaimMismatchError, requests remain in_status='S'."""
+        """When batch_writeback_bcd_rq raises OracleClaimMismatchError, error is recorded."""
         mock_fetch_oracle.return_value = [
             {
                 "GSMNUMBER": "9412345678",
@@ -349,17 +345,14 @@ class TestQ020PopulatorCrossDatabaseIntegration:
         assert summary["dispatchable"] == 0
         assert summary["errors"] == 1
 
-        mock_dispatchable.assert_not_called()
-
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_populator_data_integrity_alarm_keeps_staged_requests_undispatchable(
-        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback, mock_dispatchable
+        self, mock_fetch_oracle, mock_fetch_pg, mock_bulk_insert, mock_writeback
     ):
-        """When batch_writeback_bcd_rq raises OracleClaimDataIntegrityError, requests remain in_status='S'."""
+        """When batch_writeback_bcd_rq raises OracleClaimDataIntegrityError, error is recorded."""
         mock_fetch_oracle.return_value = [
             {
                 "GSMNUMBER": "9412345678",
@@ -406,5 +399,3 @@ class TestQ020PopulatorCrossDatabaseIntegration:
         assert summary["bcd_rq_updated"] == 0
         assert summary["dispatchable"] == 0
         assert summary["errors"] == 1
-
-        mock_dispatchable.assert_not_called()

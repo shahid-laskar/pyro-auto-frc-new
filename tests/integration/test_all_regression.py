@@ -67,12 +67,10 @@ class TestAllModeEndToEndPipeline:
     """End-to-end regression tests verifying nationwide pipeline operation."""
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_pushed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
     @patch("app.processor.async_fetch_pending_rows")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -83,12 +81,10 @@ class TestAllModeEndToEndPipeline:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
         mock_fetch_pending,
         mock_token_mgr,
         mock_recharge,
         mock_mark_pushed,
-        mock_update_bcd,
     ):
         """ALL mode processes candidates from NZ, WZ, EZ, and SZ without circle restrictions."""
         ctx = ExecutionContext.create(
@@ -122,7 +118,6 @@ class TestAllModeEndToEndPipeline:
             {"reqid": 704, "caf_serial_no": "CAF_SZ"},
         ]
         mock_writeback.return_value = 4
-        mock_mark_dispatchable.return_value = 4
 
         # 1. Run Population in ALL mode
         pop_summary = run_batch_population(context=ctx)
@@ -167,7 +162,6 @@ class TestAllModeEndToEndPipeline:
         mock_fetch_pending.assert_called_once_with(50, circle_codes=None)
         assert mock_recharge.call_count == 4
         assert mock_mark_pushed.call_count == 4
-        assert mock_update_bcd.call_count == 4
 
         assert disp_summary["mode"] == "ALL"
         assert disp_summary["zones"] == ["ALL"]
@@ -177,14 +171,12 @@ class TestAllModeEndToEndPipeline:
 
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
     @patch("app.batch.populator.fetch_eligible_bcd_records")
     def test_legacy_invocation_without_context_defaults_to_nationwide(
         self,
         mock_oracle_fetch,
         mock_pg_kyc,
-        mock_mark_dispatchable,
         mock_writeback,
         mock_bulk_insert,
     ):
@@ -253,7 +245,6 @@ class TestAllModeCallbackRegression:
         self.client = TestClient(app)
 
     @pytest.mark.asyncio
-    @patch("app.callback.update_bcd_status")
     @patch("app.callback.async_mark_as_success")
     @patch("app.callback.async_insert_txn_log")
     @patch("app.callback.async_find_row_by_pyro_trans_id")
@@ -262,9 +253,8 @@ class TestAllModeCallbackRegression:
         mock_find_row,
         mock_insert_log,
         mock_mark_success,
-        mock_update_bcd,
     ):
-        """Callback 2000 transitions Postgres to 'Y' and Oracle to 'P'."""
+        """Callback 2000 transitions Postgres to 'Y'."""
         mock_find_row.return_value = {
             "reqid": 501,
             "caf_serial_no": "CAF01",
@@ -294,13 +284,8 @@ class TestAllModeCallbackRegression:
         assert response.json() == {"received": True}
 
         mock_mark_success.assert_called_once()
-        mock_update_bcd.assert_called_once_with(
-            "CAF01", 501, BCD_STATUS_P,
-            "Recharge successful via callback. pyroTxnId=999888777 gsmno=9412345678 amount=299.0",
-        )
 
     @pytest.mark.asyncio
-    @patch("app.callback.update_bcd_status")
     @patch("app.callback.async_mark_as_failed")
     @patch("app.callback.async_insert_txn_log")
     @patch("app.callback.async_find_row_by_pyro_trans_id")
@@ -309,9 +294,8 @@ class TestAllModeCallbackRegression:
         mock_find_row,
         mock_insert_log,
         mock_mark_failed,
-        mock_update_bcd,
     ):
-        """Callback 902 transitions Postgres to 'F' and Oracle to 'F'."""
+        """Callback 902 transitions Postgres to 'F'."""
         mock_find_row.return_value = {
             "reqid": 502,
             "caf_serial_no": "CAF02",
@@ -338,12 +322,8 @@ class TestAllModeCallbackRegression:
         assert response.status_code == 200
 
         mock_mark_failed.assert_called_once()
-        mock_update_bcd.assert_called_once_with(
-            "CAF02", 502, BCD_STATUS_F, "[902] Transaction failed on IN",
-        )
 
     @pytest.mark.asyncio
-    @patch("app.callback.update_bcd_status")
     @patch("app.callback.async_mark_as_failed")
     @patch("app.callback.async_insert_txn_log")
     @patch("app.callback.async_find_row_by_pyro_trans_id")
@@ -352,9 +332,8 @@ class TestAllModeCallbackRegression:
         mock_find_row,
         mock_insert_log,
         mock_mark_failed,
-        mock_update_bcd,
     ):
-        """Callback error 5006 (invalid data) maps Oracle BCD to 'ID'."""
+        """Callback error 5006 (invalid data) marks Postgres failed."""
         mock_find_row.return_value = {
             "reqid": 503,
             "caf_serial_no": "CAF03",
@@ -379,21 +358,15 @@ class TestAllModeCallbackRegression:
 
         response = self.client.post("/callback/recharge", json=payload)
         assert response.status_code == 200
-
-        # Must map to BCD_STATUS_ID
-        mock_update_bcd.assert_called_once_with(
-            "CAF03", 503, BCD_STATUS_ID, "[5006] Subscriber is suspended or barred",
-        )
+        mock_mark_failed.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.callback.update_bcd_status")
     @patch("app.callback.async_mark_as_success")
     @patch("app.callback.async_find_row_by_pyro_trans_id")
     async def test_callback_already_terminal_row_is_idempotent(
         self,
         mock_find_row,
         mock_mark_success,
-        mock_update_bcd,
     ):
         """Duplicate callbacks on already terminal rows ('Y' or 'F') are safely ignored."""
         mock_find_row.return_value = {
@@ -423,7 +396,6 @@ class TestAllModeCallbackRegression:
         assert response.json() == {"received": True, "note": "already processed"}
 
         mock_mark_success.assert_not_called()
-        mock_update_bcd.assert_not_called()
 
 
 # ── Retry Mechanics & Dealer Exhaustion Regression ─────────────────────────────
@@ -433,7 +405,6 @@ class TestAllModeRetryAndDealerExhaustion:
 
     @pytest.mark.asyncio
     @patch("app.processor.async_release_unprocessed_claims")
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_failed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
@@ -444,7 +415,6 @@ class TestAllModeRetryAndDealerExhaustion:
         mock_token_mgr,
         mock_recharge,
         mock_mark_failed,
-        mock_update_bcd,
         mock_release_unprocessed,
     ):
         """When dealer returns 405, subsequent requests for same dealer are skipped without Pyro calls."""
@@ -473,7 +443,6 @@ class TestAllModeRetryAndDealerExhaustion:
         mock_release_unprocessed.assert_called_once_with([602])
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_failed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
@@ -484,7 +453,6 @@ class TestAllModeRetryAndDealerExhaustion:
         mock_token_mgr,
         mock_recharge,
         mock_mark_failed,
-        mock_update_bcd,
     ):
         """When retry_count >= max_retries, transient error transitions row to permanent FLAG_FAILED."""
         mock_token_mgr.session_token = "tok_sess"
@@ -503,13 +471,10 @@ class TestAllModeRetryAndDealerExhaustion:
         with patch("app.processor.decrypt", side_effect=lambda val, key: "1234"):
             summary = await process_pending_recharges(batch_size=10)
 
-        assert summary["transient_failure"] == 1
+        assert summary["permanent_failure"] == 1
         # Called with FLAG_FAILED because max retries reached
         mock_mark_failed.assert_called_once()
         assert mock_mark_failed.call_args[0][1] == FLAG_FAILED
-        mock_update_bcd.assert_called_once_with(
-            "CAF03", 603, BCD_STATUS_F, "Max retries exhausted. Last error: [500] Pyro/IN transient error — will retry",
-        )
 
 
 # ── Status Checker Regression ──────────────────────────────────────────────────
@@ -518,7 +483,6 @@ class TestAllModeStatusCheckerRegression:
     """Verify polling status checker nationwide execution and transitions."""
 
     @pytest.mark.asyncio
-    @patch("app.status_checker.update_bcd_status")
     @patch("app.status_checker.async_mark_as_success")
     @patch("app.status_checker.check_transaction_status")
     @patch("app.status_checker.async_update_status_check_attempt")
@@ -529,9 +493,8 @@ class TestAllModeStatusCheckerRegression:
         mock_update_attempt,
         mock_check_status,
         mock_mark_success,
-        mock_update_bcd,
     ):
-        """First status check poll updates Oracle to 'NR', then to 'P' on status 2000."""
+        """First status check poll resolves 2000 to success."""
         mock_fetch_rows.return_value = [
             {"reqid": 801, "pyro_trans_id": 999111, "caf_serial_no": "CAF801", "gsmno": "9412345678", "batch_date": "2026-09-01", "status_check_count": 0},
         ]
@@ -546,17 +509,9 @@ class TestAllModeStatusCheckerRegression:
 
         assert summary["checked"] == 1
         assert summary["success"] == 1
-
-        # Must have called update_bcd_status twice: first with 'NR', then with 'P'
-        assert mock_update_bcd.call_count == 2
-        mock_update_bcd.assert_has_calls([
-            call("CAF801", 801, BCD_STATUS_NR, "No callback received. Initiating status check. pyroTxnId=999111"),
-            call("CAF801", 801, BCD_STATUS_P, "Recharge successful via status check. pyroTxnId=999111"),
-        ])
         mock_mark_success.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.status_checker.update_bcd_status")
     @patch("app.status_checker.async_mark_as_failed")
     @patch("app.status_checker.check_transaction_status")
     @patch("app.status_checker.async_update_status_check_attempt")
@@ -567,7 +522,6 @@ class TestAllModeStatusCheckerRegression:
         mock_update_attempt,
         mock_check_status,
         mock_mark_failed,
-        mock_update_bcd,
     ):
         """Status 901 retries if attempts < max, marks failed when max attempts reached."""
         # Row with attempt 4 (settings.status_check_max_attempts = 5) -> attempt_no = 5 (max)
@@ -585,9 +539,6 @@ class TestAllModeStatusCheckerRegression:
         assert summary["checked"] == 1
         assert summary["failed"] == 1
         mock_mark_failed.assert_called_once()
-        mock_update_bcd.assert_called_once_with(
-            "CAF802", 802, BCD_STATUS_F, "[901] Transaction not found after 5 status-check attempts",
-        )
 
 
 # ── Scheduler Regression ───────────────────────────────────────────────────────

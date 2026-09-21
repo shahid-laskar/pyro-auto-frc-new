@@ -35,7 +35,6 @@ def _mock_pg_conn(cursor):
 class TestQ023FailureFaultTolerance:
     """Test suite verifying PostgreSQL staging failure isolation and transaction safety."""
 
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -46,7 +45,6 @@ class TestQ023FailureFaultTolerance:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
     ):
         """When bulk_insert_frc_requests fails, Oracle writeback is strictly prevented."""
         ctx = ExecutionContext.create(source="SCHEDULED", zones_str="NZ")
@@ -79,7 +77,6 @@ class TestQ023FailureFaultTolerance:
 
         # Oracle claim must NOT be attempted
         mock_writeback.assert_not_called()
-        mock_mark_dispatchable.assert_not_called()
 
         assert summary["errors"] == 1
         assert summary["staged"] == 0
@@ -177,8 +174,8 @@ class TestQ023FailureFaultTolerance:
         mock_writeback.assert_not_called()
 
     @patch("app.db.postgres.get_pg_conn")
-    def test_bulk_insert_frc_requests_stages_with_status_s_and_flag_n(self, mock_get_conn):
-        """bulk_insert_frc_requests SQL inserts in_status='S' and push_flag='N'."""
+    def test_bulk_insert_frc_requests_stages_with_status_c_and_flag_n(self, mock_get_conn):
+        """bulk_insert_frc_requests SQL inserts in_status='C', push_flag='N', pyro_status='N'."""
         mock_cur = MagicMock()
         mock_cur.fetchone.return_value = (901, "CAF001", "9412300001", 2)
         mock_get_conn.side_effect = lambda: _mock_pg_conn(mock_cur)
@@ -212,7 +209,5 @@ class TestQ023FailureFaultTolerance:
 
         executed_sql = mock_cur.execute.call_args[0][0]
         assert "in_status" in executed_sql
-        assert "'S'" in executed_sql
-        assert "push_flag" in executed_sql
-        assert "'N'" in executed_sql
+        assert "'C', 'N', 'N'" in executed_sql
         assert "RETURNING reqid, caf_serial_no" in executed_sql

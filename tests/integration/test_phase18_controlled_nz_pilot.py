@@ -44,7 +44,6 @@ from app.db.postgres import (
     bulk_insert_frc_requests,
     fetch_cos_bcd_for_gsms,
     fetch_pending_rows,
-    mark_requests_dispatchable,
 )
 from app.processor import process_pending_recharges
 from app.zones import NZ, get_zone_circles
@@ -136,12 +135,10 @@ class TestNZPilot10RowEndToEndExecution:
     """Execute the complete 10-row controlled pilot pipeline."""
 
     @pytest.mark.asyncio
-    @patch("app.processor.update_bcd_status")
     @patch("app.processor.async_mark_as_pushed")
     @patch("app.processor.recharge")
     @patch("app.processor.token_manager")
     @patch("app.processor.async_fetch_pending_rows")
-    @patch("app.batch.populator.mark_requests_dispatchable")
     @patch("app.batch.populator.batch_writeback_bcd_rq")
     @patch("app.batch.populator.bulk_insert_frc_requests")
     @patch("app.batch.populator.fetch_cos_bcd_for_gsms")
@@ -152,12 +149,10 @@ class TestNZPilot10RowEndToEndExecution:
         mock_pg_kyc,
         mock_bulk_insert,
         mock_writeback,
-        mock_mark_dispatchable,
         mock_fetch_pending,
         mock_token_mgr,
         mock_recharge,
         mock_mark_pushed,
-        mock_update_bcd,
     ):
         """Full 10-row pipeline execution with control group isolation and amount=1."""
         # 1. Initialize execution context for NZ manual trigger
@@ -231,7 +226,6 @@ class TestNZPilot10RowEndToEndExecution:
         ]
         mock_bulk_insert.return_value = staged_pairs
         mock_writeback.return_value = 10
-        mock_mark_dispatchable.return_value = 10
 
         # ── Step 1: Run Population ─────────────────────────────────────────────
         pop_summary = run_batch_population(context=ctx)
@@ -260,11 +254,6 @@ class TestNZPilot10RowEndToEndExecution:
         assert len(claimed_candidates) == 10
         for c in claimed_candidates:
             assert c["circle_code"] in NZ_CIRCLES
-
-        # Assert mark_requests_dispatchable unlocked the exact 10 reqids
-        mock_mark_dispatchable.assert_called_once()
-        dispatched_reqids = mock_mark_dispatchable.call_args[0][0]
-        assert set(dispatched_reqids) == {901 + i for i in range(10)}
 
         # ── Step 2: Run Dispatch ───────────────────────────────────────────────
         mock_token_mgr.session_token = "sess_nz_pilot_token"
@@ -308,16 +297,6 @@ class TestNZPilot10RowEndToEndExecution:
         # Pyro Submissions Assertions: EXACTLY 10 submissions, capped at 10
         assert mock_recharge.call_count == 10
         assert mock_mark_pushed.call_count == 10
-        assert mock_update_bcd.call_count == 10
-
-        # Assert Oracle BCD writeback to 'W' for each submission
-        for i, p in enumerate(population):
-            expected_reqid = 901 + i
-            expected_caf = p["caf"]
-            mock_update_bcd.assert_any_call(
-                expected_caf, expected_reqid, BCD_STATUS_W,
-                f"FRC submitted to Pyro. pyroTxnId={888000 + i}",
-            )
 
         # Dispatch Summary Assertions
         assert disp_summary["mode"] == "FILTERED"
@@ -330,8 +309,7 @@ class TestNZPilot10RowEndToEndExecution:
 
         # ── Step 3: Callback Processing Simulation ─────────────────────────────
         client = TestClient(app)
-        with patch("app.callback.update_bcd_status") as mock_cb_update_bcd, \
-             patch("app.callback.async_mark_as_success") as mock_cb_mark_success, \
+        with patch("app.callback.async_mark_as_success") as mock_cb_mark_success, \
              patch("app.callback.async_insert_txn_log") as mock_cb_log, \
              patch("app.callback.async_find_row_by_pyro_trans_id") as mock_cb_find_row:
 
@@ -365,8 +343,4 @@ class TestNZPilot10RowEndToEndExecution:
             assert cb_resp.json() == {"received": True}
 
             mock_cb_mark_success.assert_called_once()
-            mock_cb_update_bcd.assert_called_once_with(
-                "CAF_NZ_E01", 901, BCD_STATUS_P,
-                "Recharge successful via callback. pyroTxnId=888000 gsmno=9412300001 amount=1.0",
-            )
             mock_cb_log.assert_called_once()

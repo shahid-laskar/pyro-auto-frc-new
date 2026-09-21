@@ -1,13 +1,11 @@
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.db.oracle import BCD_STATUS_F, BCD_STATUS_P,BCD_STATUS_ID, update_bcd_status, bcd_status_for_pyro_failure
 from app.db.postgres import (
-    FLAG_FAILED, FLAG_SUCCESS, INVALID_DATA_CODES,
+    FLAG_FAILED, FLAG_SUCCESS,
     async_find_row_by_pyro_trans_id,
     async_insert_txn_log,
     async_mark_as_failed,
@@ -16,6 +14,9 @@ from app.db.postgres import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Codes that are terminal when received in a callback (stop processing immediately)
+_TERMINAL_STATUS_CODES = {5010, 5030, 5005, 5011, 5012, 902}
 
 
 def _values_match(expected, actual) -> bool:
@@ -30,13 +31,13 @@ def _amount_matches(expected, actual) -> bool:
         return float(expected) == float(actual)
     except (TypeError, ValueError):
         return False
-    
+
 @router.post("/callback/recharge")
 async def recharge_callback(request: Request):
     """
     Callback URL for Pyro:
         POST https://smpyrogateway.bsnl.co.in/api/callback/recharge
-    
+
     """
     try:
         body = await request.json()
@@ -61,7 +62,7 @@ async def recharge_callback(request: Request):
     except (TypeError, ValueError):
         logger.error("Callback: invalid transactionId: %s", pyro_txn_id)
         return {"received": True, "note": "invalid transactionId"}
-    
+
     row = await async_find_row_by_pyro_trans_id(pyro_txn_id_int)
     if not row:
         logger.warning("Callback: no row for pyroTxnId=%s", pyro_txn_id)
@@ -109,6 +110,7 @@ async def recharge_callback(request: Request):
         )
         return {"received": True, "note": "callback validation failed"}
 
+    # Idempotency guard: ignore late callbacks for already-terminal rows
     if current_flag in (FLAG_SUCCESS, FLAG_FAILED):
         logger.info("Callback: reqid=%s already terminal (%s) -- ignored",
                     reqid, current_flag)
@@ -130,26 +132,25 @@ async def recharge_callback(request: Request):
 
     if status_code == 2000 and data.get("status") == "SUCCESS":
         balance_before = data.get("dealerBalanceBefore", 0.0)
-        balance_after = data.get("dealerBalanceAfter", 0.0)
+        balance_after  = data.get("dealerBalanceAfter", 0.0)
         await async_mark_as_success(reqid, body_text, balance_before, balance_after, status_code)
-       
-        await asyncio.to_thread(
-            update_bcd_status, caf, reqid, BCD_STATUS_P,
-            f"Recharge successful via callback. pyroTxnId={pyro_txn_id} "
-            f"gsmno={data.get('destMsisdn')} amount={data.get('amount')}"
-        )
         logger.info("Callback SUCCESS: reqid=%s pyroTxnId=%s gsmno=%s amount=%s bal_after=%s",
                     reqid, pyro_txn_id, data.get("destMsisdn"),
                     data.get("amount"), balance_after)
+
     elif status_code == 2002:
         logger.info("Callback: reqid=%s still IN_PROCESS (2002) -- awaiting final callback", reqid)
+
+    elif status_code in _TERMINAL_STATUS_CODES:
+        # 5010 = "Only First Recharge accounts allowed" (already FRC done at switch)
+        # Stop immediately — do not retry
+        pyro_msg = body.get("message")
+        await async_mark_as_failed(reqid, FLAG_FAILED, pyro_msg, body_text, status_code)
+        logger.warning("Callback TERMINAL [%s]: reqid=%s msg=%s", status_code, reqid, pyro_msg)
+
     else:
-        remarks = f"[{status_code}] {body.get('message', 'Callback failure')}"
-        await async_mark_as_failed(reqid, FLAG_FAILED, remarks, body_text, status_code)
-        bcd_status = bcd_status_for_pyro_failure(status_code)
-        await asyncio.to_thread(
-            update_bcd_status, caf, reqid, bcd_status, remarks
-        )
-        logger.warning("Callback FAILURE: reqid=%s remarks=%s", reqid, remarks)
+        pyro_msg = body.get("message")
+        await async_mark_as_failed(reqid, FLAG_FAILED, pyro_msg, body_text, status_code)
+        logger.warning("Callback FAILURE [%s]: reqid=%s msg=%s", status_code, reqid, pyro_msg)
 
     return {"received": True}

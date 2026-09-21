@@ -28,7 +28,6 @@ from app.db.oracle import (
     batch_writeback_bcd_rq,
     fetch_bcd_claim_statuses,
     fetch_eligible_bcd_records,
-    update_bcd_status,
 )
 from app.db.postgres import (
     FLAG_FAILED,
@@ -43,12 +42,9 @@ from app.db.postgres import (
     bulk_insert_frc_requests,
     fetch_cos_bcd_for_gsms,
     fetch_pending_rows,
-    fetch_staged_unconfirmed_requests,
     mark_as_failed,
     mark_as_pushed,
     mark_as_success,
-    mark_requests_dispatchable,
-    mark_requests_staging_failed,
     population_advisory_lock,
     release_unprocessed_claims,
 )
@@ -163,34 +159,6 @@ class TestTypeCompatibilityAndSchemaInvariants:
         assert isinstance(POPULATION_ADVISORY_LOCK_KEY, int)
         assert min_bigint <= POPULATION_ADVISORY_LOCK_KEY <= max_bigint
 
-    @patch("app.db.postgres.get_pg_conn")
-    def test_mark_requests_staging_failed_truncates_reason(self, mock_get_conn):
-        """Verify reason string is defensively sliced to <= 200 chars for VARCHAR(200)."""
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 1
-        mock_get_conn.side_effect = lambda: _mock_pg_conn(mock_cursor)
-
-        long_reason = "E" * 500
-        mark_requests_staging_failed([101], reason=long_reason)
-
-        mock_cursor.execute.assert_called_once()
-        _, params = mock_cursor.execute.call_args[0]
-        assert len(params["reason"]) <= 200
-        assert params["reason"] == "E" * 200
-
-    @patch("app.db.oracle.get_oracle_conn")
-    def test_update_bcd_status_truncates_remarks(self, mock_get_conn):
-        """Verify Oracle remarks are defensively sliced to <= 2000 chars for VARCHAR2(2000)."""
-        mock_cursor = MagicMock()
-        mock_get_conn.side_effect = lambda: _mock_oracle_conn(mock_cursor)
-
-        long_remarks = "R" * 5000
-        update_bcd_status("CAF01", 101, "F", long_remarks)
-
-        mock_cursor.execute.assert_called_once()
-        _, params = mock_cursor.execute.call_args[0]
-        assert len(params["remarks"]) <= 2000
-        assert params["remarks"] == "R" * 2000
 
 
 # ── Dimension 4: Transaction Scope & Connection Lifecycle ──────────────────────
@@ -375,32 +343,18 @@ class TestZonePredicatesAndDefensiveGuards:
 class TestStateMachineInvariantsAndDispatchSafety:
     """Verify dispatch isolation and state transition predicates."""
 
-    def test_q023_initial_state_is_strictly_non_dispatchable(self):
-        """Verify Q023 stages rows with in_status='S' (non-dispatchable) and push_flag='N'."""
+    def test_q023_initial_state_is_directly_dispatchable(self):
+        """Verify Q023 inserts rows with in_status='C' (directly dispatchable) and push_flag='N'."""
         source = inspect.getsource(bulk_insert_frc_requests)
         # Verify values hardcoded in the INSERT VALUES clause
-        assert "'S', 'N', 'N'" in source
+        assert "'C', 'N', 'N'" in source
 
     def test_q024_dispatch_requires_confirmed_in_status_c(self):
-        """Verify Q024 strictly requires in_status='C', preventing pickup of staged 'S' rows."""
+        """Verify Q024 strictly requires in_status='C', preventing pickup of non-confirmed rows."""
         source = inspect.getsource(fetch_pending_rows)
         assert "WHERE in_status   = 'C'" in source
         assert "push_flag   IN ('N', 'E')" in source
         assert "FOR UPDATE SKIP LOCKED" in source
-
-    @patch("app.db.postgres.get_pg_conn")
-    def test_mark_requests_dispatchable_targets_only_staged_status_s(self, mock_get_conn):
-        """mark_requests_dispatchable only transitions rows that are in in_status='S'."""
-        mock_cursor = MagicMock()
-        mock_cursor.rowcount = 1
-        mock_get_conn.side_effect = lambda: _mock_pg_conn(mock_cursor)
-
-        mark_requests_dispatchable([101, 102])
-        sql, params = mock_cursor.execute.call_args[0]
-
-        assert "SET\n            in_status  = 'C'" in sql or "in_status  = 'C'" in sql
-        assert "AND in_status = 'S'" in sql
-        assert set(params["reqids"]) == {101, 102}
 
     @patch("app.db.postgres.get_pg_conn")
     def test_release_unprocessed_claims_safety_predicate(self, mock_get_conn):

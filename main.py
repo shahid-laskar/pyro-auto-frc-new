@@ -11,6 +11,7 @@ from app.callback import router as callback_router
 from app.config import settings
 from app.db.oracle import close_oracle_pool, init_oracle_pool
 from app.db.postgres import close_pg_pool, init_pg_pool, postgres_health
+from app.pyro_client import close_http_client, init_http_client
 from app.scheduler import start_scheduler, stop_scheduler
 from app.security import require_admin_api_key
 
@@ -31,6 +32,7 @@ async def lifespan(app: FastAPI):
     logger.info("  Scheduler     : %s", "enabled" if settings.enable_scheduler else "disabled")
     init_pg_pool()
     init_oracle_pool()
+    init_http_client()
     try:
         ok = await token_manager.authenticate()
         if not ok:
@@ -48,9 +50,11 @@ async def lifespan(app: FastAPI):
     logger.info("FRC Pyro Recharge Service -- shutting down")
     if scheduler_started:
         stop_scheduler()
+    await close_http_client()
     close_oracle_pool()
     close_pg_pool()
     logger.info("Shutdown complete")
+
 
 
 app = FastAPI(

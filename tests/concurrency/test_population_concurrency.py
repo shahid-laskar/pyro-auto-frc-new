@@ -75,8 +75,7 @@ class TestPopulationConcurrency:
              patch("app.batch.populator.fetch_eligible_bcd_records") as mock_oracle, \
              patch("app.batch.populator.fetch_cos_bcd_for_gsms") as mock_pg, \
              patch("app.batch.populator.bulk_insert_frc_requests") as mock_insert, \
-             patch("app.batch.populator.batch_writeback_bcd_rq") as mock_wb, \
-             patch("app.batch.populator.mark_requests_dispatchable") as mock_disp:
+             patch("app.batch.populator.batch_writeback_bcd_rq") as mock_wb:
 
             def slow_oracle(*args, **kwargs):
                 time.sleep(0.05)  # hold the lock briefly
@@ -105,7 +104,6 @@ class TestPopulationConcurrency:
             ]
             mock_insert.return_value = [{"reqid": 1001, "caf_serial_no": "CAF01"}]
             mock_wb.return_value = 1
-            mock_disp.return_value = 1
 
             def run_worker(ctx):
                 res = run_batch_population(context=ctx)

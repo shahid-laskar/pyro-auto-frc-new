@@ -181,7 +181,7 @@ def batch_writeback_bcd_rq(caf_reqid_pairs: Sequence[dict]) -> int:
             FRC_FLOW_STATUS        = :status,
             FRC_REQID              = :reqid,
             FRC_FLOW_STATUS_UPD_AT = CURRENT_TIMESTAMP,
-            FRC_FLOW_REMARKS       = 'FRC request created - pending Pyro submission'
+            FRC_FLOW_REMARKS       = 'N101: request inserted'
         WHERE GSMNUMBER       = :gsmnumber
           AND CAF_SERIAL_NO   = :caf_serial_no
           AND CIRCLE_CODE     = :circle_code
@@ -272,37 +272,6 @@ def batch_writeback_bcd_rq(caf_reqid_pairs: Sequence[dict]) -> int:
     return len(successful_reqids)
 
 
-def update_bcd_status(
-    caf_serial_no: str,
-    reqid: int,
-    frc_flow_status: str,
-    remarks: str,
-) -> None:
-
-    sql = """
-        UPDATE CAF_ADMIN.BCD
-        SET
-            FRC_FLOW_STATUS        = :status,
-            FRC_FLOW_STATUS_UPD_AT = CURRENT_TIMESTAMP,
-            FRC_FLOW_REMARKS       = :remarks
-        WHERE CAF_SERIAL_NO = :caf_serial_no
-          AND FRC_REQID     = :reqid
-    """
-    try:
-        with get_oracle_conn() as conn:
-            cur = conn.cursor()
-            cur.execute(sql, {
-                "status":        frc_flow_status,
-                "remarks":       remarks[:2000],
-                "caf_serial_no": caf_serial_no,
-                "reqid":         reqid,
-            })
-            conn.commit()
-        logger.debug("BCD updated: caf=%s reqid=%s -> %s",
-                     caf_serial_no, reqid, frc_flow_status)
-    except Exception as exc:
-        logger.error("BCD writeback failed (non-fatal): caf=%s reqid=%s status=%s err=%s",
-                     caf_serial_no, reqid, frc_flow_status, exc)
 
 
 def fetch_bcd_claim_statuses(candidate_identities: Sequence[dict]) -> Dict[tuple, dict]:

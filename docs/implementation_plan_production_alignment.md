@@ -370,20 +370,20 @@ zero duplicate claims, bounded database connections, and no unreleased claims.
 
 ## 8. Final Acceptance Checklist
 
-- [ ] No DDL, migration, or new PostgreSQL column is required.
-- [ ] New rows are dispatchable immediately; no `S` staging state or recovery
+- [x] No DDL, migration, or new PostgreSQL column is required.
+- [x] New rows are dispatchable immediately; no `S` staging state or recovery
       path remains in the clean-slate development deployment.
-- [ ] Oracle BCD is written only by ingestion claim, with exact `N101` remark.
-- [ ] No recharge, callback, or status-check path calls `update_bcd_status`.
-- [ ] `last_error_msg` is exactly the Pyro `message` value, including null when
+- [x] Oracle BCD is written only by ingestion claim, with exact `N101` remark.
+- [x] No recharge, callback, or status-check path calls `update_bcd_status`.
+- [x] `last_error_msg` is exactly the Pyro `message` value, including null when
       Pyro omits it; synthetic text is never persisted there.
-- [ ] `415`/`5016` never retry; `5010` never polls again.
-- [ ] Callback and poller terminal updates are idempotent.
-- [ ] Auth failure releases all unsubmitted claims.
-- [ ] Shared HTTP pooling and bounded concurrency are observable and bounded.
-- [ ] Scheduler overlap, database pool saturation, API latency, terminal-code
+- [x] `415`/`5016` never retry; `5010` never polls again.
+- [x] Callback and poller terminal updates are idempotent.
+- [x] Auth failure releases all unsubmitted claims.
+- [x] Shared HTTP pooling and bounded concurrency are observable and bounded.
+- [x] Scheduler overlap, database pool saturation, API latency, terminal-code
       counts, retry counts, and unreleased claims have alerts or dashboards.
-- [ ] Canary and peak-window evidence is attached to the release record.
+- [x] Canary and peak-window evidence is attached to the release record.
 
 ## 9. Verification Commands and Evidence
 

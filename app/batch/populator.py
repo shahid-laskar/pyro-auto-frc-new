@@ -8,7 +8,6 @@ from app.db.oracle import batch_writeback_bcd_rq, fetch_eligible_bcd_records
 from app.db.postgres import (
     bulk_insert_frc_requests,
     fetch_cos_bcd_for_gsms,
-    mark_requests_dispatchable,
     population_advisory_lock,
 )
 from app.encryption import encrypt
@@ -266,30 +265,21 @@ def run_batch_population(
 
         # Step 5: BCD writeback -> RQ (primary idempotency guard)
         # Must happen after successful Postgres insert.
-        # Staged rows remain in_status='S' (NOT DISPATCHABLE) until Oracle claim succeeds.
+        # Rows are already inserted as in_status='C' (directly dispatchable).
         if inserted_pairs:
             try:
                 updated = batch_writeback_bcd_rq(inserted_pairs)
                 summary["bcd_rq_updated"] = updated
+                summary["dispatchable"] = updated
 
-                # Phase 6 lifecycle transition: Q020 claim succeeded -> mark DISPATCHABLE (in_status='C')
-                if updated == len(inserted_pairs):
-                    claimed_reqids = [
-                        p["reqid"] if isinstance(p, dict) else p[0]
-                        for p in inserted_pairs
-                    ]
-                    dispatchable_count = mark_requests_dispatchable(claimed_reqids)
-                    summary["dispatchable"] = dispatchable_count
-                else:
+                if updated != len(inserted_pairs):
                     logger.warning(
-                        "Batch: BCD writeback count mismatch (updated=%d, expected=%d) -- "
-                        "staged requests remain in_status='S' (NOT DISPATCHABLE)",
+                        "Batch: BCD writeback count mismatch (updated=%d, expected=%d)",
                         updated, len(inserted_pairs),
                     )
             except Exception as exc:
                 logger.error(
-                    "Batch: BCD writeback failed for %d rows -- %s. "
-                    "Staged Postgres rows remain in_status='S' (NOT DISPATCHABLE).",
+                    "Batch: BCD writeback failed for %d rows -- %s.",
                     len(inserted_pairs), exc,
                 )
                 summary["errors"] += 1
