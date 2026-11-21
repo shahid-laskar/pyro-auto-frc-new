@@ -43,3 +43,29 @@ ORDER  BY updated_ts DESC;
 --        push_remarks = 'Manual reconciliation: not executed by Pyro',
 --        updated_ts = CURRENT_TIMESTAMP
 -- WHERE  reqid = <reqid> AND push_flag = 'F' AND final_status IS NULL;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- 3. One-off: rows stranded in 'E' before the P2 #8a fix
+-- Auth/infra failures used to increment retry_count without an exhaustion
+-- check, leaving rows in 'E' with retry_count > max_retries; the dispatcher
+-- (retry_count <= max_retries) never picks them up again. Inspect, then
+-- choose: give them one more attempt (3a) or close them as failed (3b).
+-- ═══════════════════════════════════════════════════════════════════════
+SELECT reqid, retry_count, max_retries, last_error_msg, pyro_final_statuscode, updated_ts
+FROM   public.frc_pyro_request_data
+WHERE  push_flag = 'E' AND retry_count > max_retries
+ORDER  BY updated_ts;
+
+-- 3a. One more attempt (a resend of an already-registered request returns 5018
+--     and is parked for reconciliation, so this is money-safe):
+-- UPDATE public.frc_pyro_request_data
+-- SET    retry_count = max_retries, updated_ts = CURRENT_TIMESTAMP,
+--        push_remarks = 'Manual: re-queued after P2 #8a fix'
+-- WHERE  push_flag = 'E' AND retry_count > max_retries;
+--
+-- 3b. Close as failed:
+-- UPDATE public.frc_pyro_request_data
+-- SET    push_flag = 'F', final_status = 'FAILED', pyro_status = 'FAL',
+--        completed_at = CURRENT_TIMESTAMP, updated_ts = CURRENT_TIMESTAMP,
+--        push_remarks = 'Manual: closed, retries exhausted on auth/infra errors'
+-- WHERE  push_flag = 'E' AND retry_count > max_retries;

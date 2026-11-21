@@ -40,6 +40,15 @@ async def _handle_transient(row, reqid, pyro_msg, response_text, status_code):
     return flag
 
 
+def _is_token_failure(status_code, message) -> bool:
+    """5000 is shared by business and auth errors (spec §9); only the message tells
+    'Invalid access token' / 'Invalid token' / 'Invalid credintials' apart."""
+    if status_code != 5000 or not message:
+        return False
+    text = str(message).lower()
+    return "token" in text or "credintial" in text or "credential" in text
+
+
 def _to_int_or_none(value) -> Optional[int]:
     try:
         return int(value) if value is not None and str(value).strip() != "" else None
@@ -244,7 +253,7 @@ async def process_pending_recharges(
             elif status_code == -1 and pyro_msg == "Failed to generate action token":
                 abort_batch = True
                 await async_mark_as_failed(reqid, FLAG_RETRY, pyro_msg,
-                                           response_text, status_code)
+                                           response_text, status_code, count_attempt=False)
                 retryable += 1
                 logger.warning(
                     "reqid=%s TRANSIENT: action token unavailable; aborting remainder of batch",
@@ -257,6 +266,16 @@ async def process_pending_recharges(
                 await _park(reqid, f"outcome unknown after send: {pyro_msg}",
                             response_text, status_code)
                 reconcile += 1
+
+            elif status_code == -1:
+                # Never reached Pyro (connect/pool failure): an infrastructure problem,
+                # not the row's fault. Retry without burning an attempt and stop the batch.
+                abort_batch = True
+                await async_mark_as_failed(reqid, FLAG_RETRY, pyro_msg,
+                                           response_text, status_code, count_attempt=False)
+                retryable += 1
+                logger.error("reqid=%s Pyro unreachable (%s) -- aborting remainder of batch",
+                             reqid, pyro_msg)
 
             elif status_code == 5018 or (status_code == 5016 and attempt > 1):
                 # 5018: this clientTxnId already exists at Pyro -> an earlier attempt registered.
@@ -279,12 +298,13 @@ async def process_pending_recharges(
                     dealer_msisdn, reqid,
                 )
 
-            elif status_code == 506:
+            elif status_code == 506 or _is_token_failure(status_code, pyro_msg):
                 abort_batch = True
-                logger.error("Invalid token (506) — triggering re-auth and aborting batch")
+                logger.error("Invalid token (%s: %s) — triggering re-auth and aborting batch",
+                             status_code, pyro_msg)
                 await token_manager.authenticate()
                 await async_mark_as_failed(reqid, FLAG_RETRY, pyro_msg,
-                                           response_text, status_code)
+                                           response_text, status_code, count_attempt=False)
                 retryable += 1
 
             elif status_code in (415, 5016):
@@ -306,7 +326,7 @@ async def process_pending_recharges(
                 logger.error("Auth credential error (%s) — triggering re-auth and aborting batch", status_code)
                 await token_manager.authenticate()
                 await async_mark_as_failed(reqid, FLAG_RETRY, pyro_msg,
-                                           response_text, status_code)
+                                           response_text, status_code, count_attempt=False)
                 retryable += 1
 
             elif status_code in (500, 5000):

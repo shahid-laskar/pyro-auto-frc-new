@@ -190,9 +190,18 @@ class TestCallbackAllowList:
 # #5  Status checker
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _status_success(**overrides):
+    data = {"clientTxnId": "00501", "transactionId": "43385", "destMsisdn": "9489902775",
+            "amount": 153.0, "status": "SUCCESS",
+            "dealerBalanceBefore": 446.28, "dealerBalanceAfter": 293.28}
+    data.update(overrides)
+    return {"statusCode": 2000, "status": "SUCCESS", "message": "Recharge successful", "data": data}
+
+
 @pytest.fixture
 def sc():
-    with patch("app.status_checker.async_park_stale_pushed_rows", new_callable=AsyncMock, return_value=[]) as stale, \
+    with patch("app.status_checker.async_release_orphaned_claims", new_callable=AsyncMock, return_value=[]) as orphans, \
+         patch("app.status_checker.async_park_stale_pushed_rows", new_callable=AsyncMock, return_value=[]) as stale, \
          patch("app.status_checker.async_fetch_pushed_rows_for_status_check", new_callable=AsyncMock) as fetch, \
          patch("app.status_checker.check_transaction_status", new_callable=AsyncMock) as check, \
          patch("app.status_checker.async_update_status_check_attempt", new_callable=AsyncMock) as attempt, \
@@ -201,9 +210,9 @@ def sc():
          patch("app.status_checker.async_mark_for_reconciliation", new_callable=AsyncMock, return_value=1) as park:
         fetch.return_value = [{"reqid": 501, "pyro_trans_id": 43385, "caf_serial_no": "CAF501",
                                "gsmno": "9489902775", "batch_date": "2026-11-21",
-                               "status_check_count": 4}]
-        yield {"stale": stale, "fetch": fetch, "check": check, "attempt": attempt,
-               "success": success, "failed": failed, "park": park}
+                               "status_check_count": 4, "client_txn_id": "00501", "frcamt": 153}]
+        yield {"stale": stale, "orphans": orphans, "fetch": fetch, "check": check,
+               "attempt": attempt, "success": success, "failed": failed, "park": park}
 
 
 @pytest.mark.asyncio
@@ -238,7 +247,7 @@ class TestStatusChecker:
         assert summary["parked"] == 2
 
     async def test_success_on_already_final_row_is_harmless(self, sc):
-        sc["check"].return_value = {"statusCode": 2000, "data": {}}
+        sc["check"].return_value = _status_success()
         sc["success"].return_value = 0
         summary = await run_status_checks()
         assert summary["success"] == 1

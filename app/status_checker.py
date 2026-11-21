@@ -9,8 +9,11 @@ from app.db.postgres import (
     async_mark_as_success,
     async_mark_for_reconciliation,
     async_park_stale_pushed_rows,
+    async_release_orphaned_claims,
     async_update_status_check_attempt,
+    orphan_claim_age_minutes,
 )
+from app.callback import validate_txn_data
 from app.pyro_client import check_transaction_status
 from app.config import settings
 
@@ -24,6 +27,13 @@ _TERMINAL_STATUS_CODES = {5010, 5030, 5005, 5011, 5012, 902}
 STALE_PUSH_MINUTES = 60
 
 
+def _to_int(value):
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+
+
 async def run_status_checks() -> dict:
     """Check status of pushed-but-no-callback rows.
 
@@ -31,6 +41,17 @@ async def run_status_checks() -> dict:
     this loop is running is never overwritten.
     """
     parked = 0
+    try:
+        age = orphan_claim_age_minutes()
+        orphans = await async_release_orphaned_claims(age)
+        if orphans:
+            logger.warning(
+                "Status checker: released %d orphaned claim(s) (claimed > %d min ago, never pushed): %s",
+                len(orphans), age, orphans[:50],
+            )
+    except Exception as exc:
+        logger.error("Status checker: orphaned-claim sweep failed: %s", exc)
+
     try:
         stale = await async_park_stale_pushed_rows(STALE_PUSH_MINUTES)
     except Exception as exc:
@@ -85,7 +106,31 @@ async def run_status_checks() -> dict:
 
         await async_update_status_check_attempt(reqid)
 
-        if status_code == 2000:
+        txn_errors = []
+        if status_code == 2000 and inner.get("status") == "SUCCESS":
+            txn_id = _to_int(inner.get("transactionId"))
+            txn_errors = validate_txn_data(row, inner, txn_id if txn_id is not None else _to_int(pyro_trans_id))
+
+        if status_code == 2000 and inner.get("status") != "SUCCESS":
+            # 2000 is the API call's status; the transaction's own status is data.status.
+            await async_mark_for_reconciliation(
+                reqid, f"status check 2000 with transaction status {inner.get('status')!r}",
+                response_text, status_code,
+            )
+            logger.critical("reqid=%s STATUS CHECK 2000 without SUCCESS (%s) -- parked",
+                            reqid, inner.get("status"))
+            parked += 1
+
+        elif status_code == 2000 and txn_errors:
+            await async_mark_for_reconciliation(
+                reqid, f"status check SUCCESS but data mismatch: {'; '.join(txn_errors)}",
+                response_text, status_code,
+            )
+            logger.critical("reqid=%s STATUS CHECK SUCCESS with mismatched data %s -- parked",
+                            reqid, txn_errors)
+            parked += 1
+
+        elif status_code == 2000:
             updated = await async_mark_as_success(
                 reqid, response_text,
                 inner.get("dealerBalanceBefore", 0.0), inner.get("dealerBalanceAfter", 0.0),

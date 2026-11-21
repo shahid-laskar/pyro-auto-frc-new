@@ -63,7 +63,11 @@ def _amount_matches(expected, actual) -> bool:
         return False
 
 
-def _validate(row: dict, data: dict, pyro_txn_id_int: int) -> list:
+def validate_txn_data(row: dict, data: dict, pyro_txn_id_int: Optional[int]) -> list:
+    """Compare Pyro transaction data (callback or status check) with our row.
+
+    Returns a list of mismatch descriptions (empty = valid).
+    """
     errors = []
     expected_client = row.get("client_txn_id") or str(row["reqid"]).zfill(5)[:15]
     if not _values_match(expected_client, data.get("clientTxnId")):
@@ -73,7 +77,8 @@ def _validate(row: dict, data: dict, pyro_txn_id_int: int) -> list:
     if not _amount_matches(row.get("frcamt"), data.get("amount")):
         errors.append(f"amount mismatch expected={row.get('frcamt')} got={data.get('amount')}")
     stored_txn = row.get("pyro_trans_id")
-    if stored_txn is not None and _to_int(stored_txn) != pyro_txn_id_int:
+    if (stored_txn is not None and pyro_txn_id_int is not None
+            and _to_int(stored_txn) != pyro_txn_id_int):
         errors.append(f"transactionId mismatch expected={stored_txn} got={pyro_txn_id_int}")
     return errors
 
@@ -144,7 +149,7 @@ async def recharge_callback(request: Request):
     body_text    = json.dumps(body)
     is_success   = status_code == 2000 and data.get("status") == "SUCCESS"
 
-    validation_errors = _validate(row, data, pyro_txn_id_int)
+    validation_errors = validate_txn_data(row, data, pyro_txn_id_int)
     if validation_errors:
         logger.warning(
             "Callback validation failed: reqid=%s pyroTxnId=%s errors=%s",

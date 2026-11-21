@@ -647,13 +647,19 @@ def mark_for_reconciliation(reqid: int, reason: str,
 @_pg_retry
 def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
                    response_text: Optional[str] = None,
-                   final_statuscode: Optional[int] = None) -> int:
+                   final_statuscode: Optional[int] = None,
+                   count_attempt: bool = True) -> int:
     """Record a failed attempt. Atomic transition guard (returns rows updated, 0 or 1):
 
     - never overwrites SUCCESS ('Y') or a definitive failure ('F' + final_status set);
     - a retry ('E') only applies to rows still in flight ('N'/'P'/'E'), so it can never
       un-park a row waiting for reconciliation;
     - a final failure may also resolve a parked row ('F' + final_status NULL).
+
+    count_attempt=False is for failures that say nothing about the row itself
+    (auth/token problems, Pyro unreachable): the row is retried without using up
+    one of its max_retries, so it can never get stuck in 'E' with
+    retry_count > max_retries (which fetch_pending_rows would never pick up).
     """
     is_permanent = (push_flag == FLAG_FAILED)
     client_txn_id = str(reqid).zfill(5)[:15]
@@ -666,7 +672,7 @@ def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
             push_flag               = %s,
             last_error_msg          = %s,
             msg_afterreq            = COALESCE(%s, msg_afterreq),
-            retry_count             = CASE WHEN %s THEN retry_count ELSE retry_count + 1 END,
+            retry_count             = CASE WHEN %s THEN retry_count + 1 ELSE retry_count END,
             final_status            = CASE WHEN %s THEN 'FAILED' ELSE final_status END,
             pyro_final_statuscode   = COALESCE(%s, pyro_final_statuscode),
             completed_at            = CASE WHEN %s THEN CURRENT_TIMESTAMP ELSE completed_at END,
@@ -682,7 +688,7 @@ def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
         with conn.cursor() as cur:
             cur.execute(sql, (
                 client_txn_id, push_flag, error_msg, response_text,
-                is_permanent, is_permanent, final_statuscode,
+                (not is_permanent) and count_attempt, is_permanent, final_statuscode,
                 is_permanent, is_permanent, reqid, is_permanent,
             ))
             if cur.rowcount == 0:
@@ -695,7 +701,7 @@ def fetch_pushed_rows_for_status_check(limit: int = 100) -> List[dict]:
         SELECT
             reqid, pyro_trans_id, client_txn_id,
             gsmno, caf_serial_no, batch_date,
-            status_check_count
+            status_check_count, frcamt
         FROM public.frc_pyro_request_data
         WHERE push_flag = 'P'
           AND status_check_eligible_at <= CURRENT_TIMESTAMP
@@ -769,6 +775,45 @@ def find_row_by_client_txn_id(client_txn_id: str) -> Optional[dict]:
             if str(row["reqid"]).zfill(5)[:15] != text:
                 return None
             return row
+
+
+def orphan_claim_age_minutes() -> int:
+    """Age after which a claimed-but-never-pushed row is certainly not held by a live batch.
+
+    Worst case per row is an action-token call plus the recharge call (each up to the
+    request timeout); rows wait in a semaphore of size recharge_concurrency.
+    """
+    per_row_seconds = 2 * float(settings.pyro_request_timeout_seconds) + 5
+    concurrency = max(int(getattr(settings, "recharge_concurrency", 4)), 1)
+    waves = -(-int(settings.recharge_batch_size) // concurrency)      # ceil
+    return max(30, int(waves * per_row_seconds / 60) + 15)
+
+
+@_pg_retry
+def release_orphaned_claims(min_age_minutes: int) -> List[int]:
+    """Release rows claimed ('P') long ago that never got a push recorded.
+
+    They are left behind when the process dies between the claim and mark_as_pushed.
+    Releasing is money-safe even if the request did reach Pyro before the crash: the
+    retry reuses the same clientTxnId, Pyro answers 5018, and the row is parked for
+    reconciliation (and a late callback still resolves it via clientTxnId).
+    """
+    sql = """
+        UPDATE public.frc_pyro_request_data
+        SET
+            push_flag    = CASE WHEN retry_count > 0 THEN 'E' ELSE 'N' END,
+            push_remarks = 'Claim released - orphaned, no submission recorded',
+            updated_ts   = CURRENT_TIMESTAMP
+        WHERE push_flag = 'P'
+          AND push_date IS NULL
+          AND pyro_trans_id IS NULL
+          AND submitted_at < CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')
+        RETURNING reqid
+    """
+    with get_pg_write_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (min_age_minutes,))
+            return [r[0] for r in cur.fetchall()]
 
 
 @_pg_retry
@@ -855,6 +900,9 @@ async def async_mark_as_success(reqid, response_text, balance_before, balance_af
 async def async_find_row_by_client_txn_id(client_txn_id):
     return await asyncio.to_thread(find_row_by_client_txn_id, client_txn_id)
 
+async def async_release_orphaned_claims(min_age_minutes: int):
+    return await asyncio.to_thread(release_orphaned_claims, min_age_minutes)
+
 async def async_park_stale_pushed_rows(max_age_minutes: int = 60):
     return await asyncio.to_thread(park_stale_pushed_rows, max_age_minutes)
 
@@ -864,9 +912,10 @@ async def async_mark_for_reconciliation(reqid, reason, response_text=None,
                                    response_text, status_code, pyro_trans_id)
 
 async def async_mark_as_failed(reqid, push_flag, pyro_msg,
-                                response_text=None, final_statuscode=None):
+                                response_text=None, final_statuscode=None,
+                                count_attempt=True):
     return await asyncio.to_thread(mark_as_failed, reqid, push_flag, pyro_msg,
-                                   response_text, final_statuscode)
+                                   response_text, final_statuscode, count_attempt)
 
 async def async_find_row_by_pyro_trans_id(pyro_trans_id):
     return await asyncio.to_thread(find_row_by_pyro_trans_id, pyro_trans_id)

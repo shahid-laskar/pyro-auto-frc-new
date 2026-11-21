@@ -496,13 +496,19 @@ class TestAllModeStatusCheckerRegression:
     ):
         """First status check poll resolves 2000 to success."""
         mock_fetch_rows.return_value = [
-            {"reqid": 801, "pyro_trans_id": 999111, "caf_serial_no": "CAF801", "gsmno": "9412345678", "batch_date": "2026-09-01", "status_check_count": 0},
+            {"reqid": 801, "pyro_trans_id": 999111, "caf_serial_no": "CAF801", "gsmno": "9412345678", "batch_date": "2026-09-01", "status_check_count": 0, "frcamt": 299},
         ]
 
+        # Shape of a real transaction-status success response (transactionId is a string)
         mock_check_status.return_value = {
             "statusCode": 2000,
-            "message": "Success",
-            "data": {"dealerBalanceBefore": 1000.0, "dealerBalanceAfter": 701.0},
+            "status": "SUCCESS",
+            "message": "Recharge successful",
+            "data": {
+                "clientTxnId": "00801", "transactionId": "999111", "destMsisdn": "9412345678",
+                "amount": 299.0, "status": "SUCCESS",
+                "dealerBalanceBefore": 1000.0, "dealerBalanceAfter": 701.0,
+            },
         }
 
         summary = await run_status_checks()
