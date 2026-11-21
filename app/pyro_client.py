@@ -180,7 +180,7 @@ async def recharge(
             started_at, ended_at, duration,
             "N", "N", None, "Action token generation failed",
         )
-        return data
+        return {**data, "_request_sent": False}
 
     payload = {
         "dealerMsisdn": dealer_msisdn,
@@ -223,7 +223,24 @@ async def recharge(
 
         logger.info("RECHARGE reqid=%s clientTxnId=%s statusCode=%s duration=%dms",
                     reqid, client_txn_id, status_code, duration)
-        return data
+        return {**data, "_request_sent": True}
+
+    except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as exc:
+        # No connection was established, so nothing reached Pyro: safe to retry.
+        # Must precede TimeoutException (ConnectTimeout/PoolTimeout subclass it).
+        ended_at = datetime.now(timezone.utc)
+        duration = int((ended_at - started_at).total_seconds() * 1000)
+        await _log(
+            reqid, caf_serial_no, gsmno, batch_date, client_txn_id,
+            "RECHARGE", url, "POST", attempt_no,
+            masked_headers, _mask_body(payload),
+            None, None, -1, "NOT_SENT", None,
+            started_at, ended_at, duration,
+            "N", "N", "RequestNotSent", f"{type(exc).__name__}: {exc}",
+        )
+        logger.error("RECHARGE connection failed before send reqid=%s: %s", reqid, exc)
+        return {"statusCode": -1, "status": "ERROR",
+                "message": f"Connection failed: {exc}", "_request_sent": False}
 
     except httpx.TimeoutException as exc:
         ended_at = datetime.now(timezone.utc)
@@ -237,7 +254,8 @@ async def recharge(
             "N", "N", "httpx.TimeoutException", str(exc),
         )
         logger.error("RECHARGE timed out reqid=%s", reqid)
-        return {"statusCode": -1, "status": "ERROR", "message": "Request timed out"}
+        return {"statusCode": -1, "status": "ERROR", "message": "Request timed out",
+                "_request_sent": True}
 
     except Exception as exc:
         ended_at = datetime.now(timezone.utc)
@@ -251,7 +269,8 @@ async def recharge(
             "N", "N", type(exc).__name__, str(exc),
         )
         logger.error("RECHARGE error reqid=%s: %s", reqid, exc)
-        return {"statusCode": -1, "status": "ERROR", "message": str(exc)}
+        return {"statusCode": -1, "status": "ERROR", "message": str(exc),
+                "_request_sent": True}
 
 
 async def check_transaction_status(

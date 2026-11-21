@@ -12,6 +12,8 @@ from app.db.postgres import (
     async_fetch_pending_rows,
     async_mark_as_failed,
     async_mark_as_pushed,
+    async_mark_as_success,
+    async_mark_for_reconciliation,
     async_release_unprocessed_claims,
 )
 from app.pyro_client import recharge
@@ -36,6 +38,24 @@ async def _handle_transient(row, reqid, pyro_msg, response_text, status_code):
         logger.warning("reqid=%s TRANSIENT (retry %d/%d): %s",
                        reqid, attempt, row["max_retries"], pyro_msg)
     return flag
+
+
+def _to_int_or_none(value) -> Optional[int]:
+    try:
+        return int(value) if value is not None and str(value).strip() != "" else None
+    except (TypeError, ValueError):
+        return None
+
+
+async def _park(reqid, reason, response_text, status_code, pyro_trans_id=None) -> None:
+    """Stop retrying a row whose recharge may already have been executed by Pyro."""
+    await async_mark_for_reconciliation(
+        reqid, reason, response_text, status_code, _to_int_or_none(pyro_trans_id),
+    )
+    logger.critical(
+        "reqid=%s RECONCILIATION REQUIRED [%s]: %s — not retried (Pyro may have executed it)",
+        reqid, status_code, reason,
+    )
 
 
 async def process_pending_recharges(
@@ -76,6 +96,7 @@ async def process_pending_recharges(
             "registered":        0,
             "perm_failed":       0,
             "retryable":         0,
+            "reconciliation_required": 0,
         }
 
     if not token_manager.session_token or not token_manager.access_token:
@@ -98,10 +119,11 @@ async def process_pending_recharges(
                 "registered":        0,
                 "perm_failed":       0,
                 "retryable":         0,
+                "reconciliation_required": 0,
                 "auth_failed":       True,
             }
 
-    registered = perm_failed = retryable = 0
+    registered = perm_failed = retryable = reconcile = 0
     exhausted_dealers = set()
     processed_reqids = set()
     abort_batch = False
@@ -109,7 +131,7 @@ async def process_pending_recharges(
     sem = asyncio.Semaphore(concurrency)
 
     async def _dispatch_single_row(row: dict) -> None:
-        nonlocal abort_batch, registered, perm_failed, retryable
+        nonlocal abort_batch, registered, perm_failed, retryable, reconcile
 
         reqid         = row["reqid"]
         caf           = row["caf_serial_no"]
@@ -152,7 +174,7 @@ async def process_pending_recharges(
 
             status_code   = response.get("statusCode")
             response_text = json.dumps(response)
-            inner         = response.get("data", {})
+            inner         = response.get("data") or {}
             pyro_msg      = response.get("message")
 
             if status_code == 2002:
@@ -166,6 +188,22 @@ async def process_pending_recharges(
                 logger.info("reqid=%s registered -- pyroTxnId=%s", reqid, pyro_trans_id)
                 registered += 1
 
+            elif status_code == 2000:
+                # Synchronous completion (spec §9: "Recharge executed successfully").
+                if response.get("status") == "SUCCESS" or inner.get("status") == "SUCCESS":
+                    await async_mark_as_success(
+                        reqid, response_text,
+                        inner.get("dealerBalanceBefore"), inner.get("dealerBalanceAfter"),
+                        status_code, _to_int_or_none(inner.get("transactionId")),
+                    )
+                    logger.info("reqid=%s SUCCESS (synchronous 2000) pyroTxnId=%s",
+                                reqid, inner.get("transactionId"))
+                    registered += 1
+                else:
+                    await _park(reqid, f"2000 without SUCCESS status: {pyro_msg}",
+                                response_text, status_code, inner.get("transactionId"))
+                    reconcile += 1
+
             elif status_code == -1 and pyro_msg == "Failed to generate action token":
                 abort_batch = True
                 await async_mark_as_failed(reqid, FLAG_RETRY, pyro_msg,
@@ -175,6 +213,20 @@ async def process_pending_recharges(
                     "reqid=%s TRANSIENT: action token unavailable; aborting remainder of batch",
                     reqid,
                 )
+
+            elif status_code == -1 and response.get("_request_sent", True):
+                # Timeout / transport error / unparseable body after the request was sent:
+                # Pyro may have executed it. A retry would only return 5018 and end FAILED.
+                await _park(reqid, f"outcome unknown after send: {pyro_msg}",
+                            response_text, status_code)
+                reconcile += 1
+
+            elif status_code == 5018 or (status_code == 5016 and attempt > 1):
+                # 5018: this clientTxnId already exists at Pyro -> an earlier attempt registered.
+                # 5016 on a retry: most likely our own earlier attempt went through.
+                await _park(reqid, f"[{status_code}] earlier attempt may have succeeded: {pyro_msg}",
+                            response_text, status_code)
+                reconcile += 1
 
             elif status_code == 405:
                 # Dealer balance exhausted — mark this dealer as done for this batch
@@ -262,12 +314,15 @@ async def process_pending_recharges(
         "registered":        registered,
         "perm_failed":       perm_failed,
         "retryable":         retryable,
+        "reconciliation_required": reconcile,
     }
     logger.info(
         "Processor complete [exec_id=%s][source=%s][zones=%s][mode=%s]: "
-        "claimed=%d submitted=%d success=%d transient_failure=%d permanent_failure=%d retry=%d",
+        "claimed=%d submitted=%d success=%d transient_failure=%d permanent_failure=%d retry=%d "
+        "reconciliation_required=%d",
         summary["execution_id"], summary["source"], summary["zones"], summary["mode"],
         summary["claimed"], summary["submitted"], summary["success"],
         summary["transient_failure"], summary["permanent_failure"], summary["retry"],
+        summary["reconciliation_required"],
     )
     return summary

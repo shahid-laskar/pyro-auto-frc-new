@@ -560,10 +560,12 @@ def mark_as_pushed(reqid: int, pyro_trans_id: int, response_text: str,
 
 @_pg_retry
 def mark_as_success(reqid: int, response_text: str,balance_before: float,
-                    balance_after: float, final_statuscode: int) -> None:
+                    balance_after: float, final_statuscode: int,
+                    pyro_trans_id: Optional[int] = None) -> None:
     sql = """
         UPDATE public.frc_pyro_request_data
         SET
+            pyro_trans_id           = COALESCE(pyro_trans_id, %s),
             push_flag               = 'Y',
             final_status            = 'SUCCESS',
             pyro_status             = 'SUC',
@@ -580,7 +582,54 @@ def mark_as_success(reqid: int, response_text: str,balance_before: float,
     """
     with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
-            cur.execute(sql, (final_statuscode, balance_before,balance_after, response_text, reqid))
+            cur.execute(sql, (pyro_trans_id, final_statuscode, balance_before,
+                              balance_after, response_text, reqid))
+
+
+# Rows whose recharge outcome is unknown (the request may have been executed by Pyro)
+# are parked WITHOUT a schema change as:
+#     push_flag = 'F'  (never re-dispatched or polled)
+#     final_status IS NULL  (distinguishes them from real failures, which are 'FAILED')
+#     push_remarks LIKE 'RECONCILE:%'
+# Find them with:
+#     SELECT * FROM frc_pyro_request_data
+#     WHERE push_flag = 'F' AND final_status IS NULL AND push_remarks LIKE 'RECONCILE:%';
+RECONCILE_REMARK_PREFIX = "RECONCILE:"
+
+
+@_pg_retry
+def mark_for_reconciliation(reqid: int, reason: str,
+                            response_text: Optional[str] = None,
+                            status_code: Optional[int] = None,
+                            pyro_trans_id: Optional[int] = None) -> int:
+    """Park a row whose recharge may have been executed: stop all retries, keep it visible.
+
+    Never overwrites a row that is already SUCCESS ('Y'). Returns rows updated.
+    """
+    client_txn_id = str(reqid).zfill(5)[:15]
+    remarks = f"{RECONCILE_REMARK_PREFIX} {reason}"[:200]
+    sql = """
+        UPDATE public.frc_pyro_request_data
+        SET
+            client_txn_id           = COALESCE(client_txn_id, %s),
+            push_flag               = 'F',
+            final_status            = NULL,
+            push_remarks            = %s,
+            last_error_msg          = %s,
+            msg_afterreq            = COALESCE(%s, msg_afterreq),
+            pyro_final_statuscode   = COALESCE(%s, pyro_final_statuscode),
+            pyro_trans_id           = COALESCE(pyro_trans_id, %s),
+            updated_ts              = CURRENT_TIMESTAMP
+        WHERE reqid = %s
+          AND push_flag <> 'Y'
+    """
+    with get_pg_write_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (
+                client_txn_id, remarks, reason[:500], response_text,
+                status_code, pyro_trans_id, reqid,
+            ))
+            return cur.rowcount
 
 @_pg_retry
 def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
@@ -708,9 +757,16 @@ async def async_mark_as_pushed(reqid, pyro_trans_id, response_text, msg2pyro, sc
     await asyncio.to_thread(mark_as_pushed, reqid, pyro_trans_id,
                             response_text, msg2pyro, sc)
 
-async def async_mark_as_success(reqid, response_text, balance_before, balance_after, final_statuscode):
+async def async_mark_as_success(reqid, response_text, balance_before, balance_after,
+                                final_statuscode, pyro_trans_id=None):
     await asyncio.to_thread(mark_as_success, reqid, response_text,
-                            balance_before, balance_after, final_statuscode)
+                            balance_before, balance_after, final_statuscode,
+                            pyro_trans_id)
+
+async def async_mark_for_reconciliation(reqid, reason, response_text=None,
+                                        status_code=None, pyro_trans_id=None):
+    return await asyncio.to_thread(mark_for_reconciliation, reqid, reason,
+                                   response_text, status_code, pyro_trans_id)
 
 async def async_mark_as_failed(reqid, push_flag, pyro_msg,
                                 response_text=None, final_statuscode=None):
