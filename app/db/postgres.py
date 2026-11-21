@@ -552,16 +552,26 @@ def mark_as_pushed(reqid: int, pyro_trans_id: int, response_text: str,
             client_txn_id           = %s,
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
+          AND push_flag = 'P'
     """
+    # Guard: a callback found via clientTxnId may already have finalised the row.
     with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (pyro_trans_id, initial_statuscode,
                               msg2pyro, response_text, client_txn_id, reqid))
+            if cur.rowcount == 0:
+                logger.warning("mark_as_pushed: reqid=%s no longer in 'P' -- not overwritten", reqid)
+            return cur.rowcount
 
 @_pg_retry
 def mark_as_success(reqid: int, response_text: str,balance_before: float,
                     balance_after: float, final_statuscode: int,
-                    pyro_trans_id: Optional[int] = None) -> None:
+                    pyro_trans_id: Optional[int] = None) -> int:
+    """Record a confirmed recharge. Atomic and idempotent: a row already 'Y' is untouched.
+
+    A SUCCESS from Pyro is authoritative about money movement, so it also resolves rows
+    parked for reconciliation or finalised as failed. Returns rows updated (0 or 1).
+    """
     sql = """
         UPDATE public.frc_pyro_request_data
         SET
@@ -579,11 +589,13 @@ def mark_as_success(reqid: int, response_text: str,balance_before: float,
             push_remarks            = 'Recharge successful',
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
+          AND push_flag <> 'Y'
     """
     with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (pyro_trans_id, final_statuscode, balance_before,
                               balance_after, response_text, reqid))
+            return cur.rowcount
 
 
 # Rows whose recharge outcome is unknown (the request may have been executed by Pyro)
@@ -604,7 +616,7 @@ def mark_for_reconciliation(reqid: int, reason: str,
                             pyro_trans_id: Optional[int] = None) -> int:
     """Park a row whose recharge may have been executed: stop all retries, keep it visible.
 
-    Never overwrites a row that is already SUCCESS ('Y'). Returns rows updated.
+    Never overwrites a SUCCESS ('Y') or a definitively FAILED row. Returns rows updated.
     """
     client_txn_id = str(reqid).zfill(5)[:15]
     remarks = f"{RECONCILE_REMARK_PREFIX} {reason}"[:200]
@@ -622,6 +634,7 @@ def mark_for_reconciliation(reqid: int, reason: str,
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
           AND push_flag <> 'Y'
+          AND NOT (push_flag = 'F' AND final_status IS NOT NULL)
     """
     with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
@@ -634,7 +647,14 @@ def mark_for_reconciliation(reqid: int, reason: str,
 @_pg_retry
 def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
                    response_text: Optional[str] = None,
-                   final_statuscode: Optional[int] = None) -> None:
+                   final_statuscode: Optional[int] = None) -> int:
+    """Record a failed attempt. Atomic transition guard (returns rows updated, 0 or 1):
+
+    - never overwrites SUCCESS ('Y') or a definitive failure ('F' + final_status set);
+    - a retry ('E') only applies to rows still in flight ('N'/'P'/'E'), so it can never
+      un-park a row waiting for reconciliation;
+    - a final failure may also resolve a parked row ('F' + final_status NULL).
+    """
     is_permanent = (push_flag == FLAG_FAILED)
     client_txn_id = str(reqid).zfill(5)[:15]
     # Truncate last_error_msg to column limit (500 chars) if provided
@@ -653,14 +673,21 @@ def mark_as_failed(reqid: int, push_flag: str, pyro_msg: Optional[str],
             pyro_status             = CASE WHEN %s THEN 'FAL' ELSE pyro_status END,
             updated_ts              = CURRENT_TIMESTAMP
         WHERE reqid = %s
+          AND (
+                push_flag IN ('N', 'P', 'E')
+             OR (%s AND push_flag = 'F' AND final_status IS NULL)
+          )
     """
     with get_pg_write_conn() as conn:
         with conn.cursor() as cur:
             cur.execute(sql, (
                 client_txn_id, push_flag, error_msg, response_text,
                 is_permanent, is_permanent, final_statuscode,
-                is_permanent, is_permanent, reqid,
+                is_permanent, is_permanent, reqid, is_permanent,
             ))
+            if cur.rowcount == 0:
+                logger.info("mark_as_failed: reqid=%s already final -- %s not applied", reqid, push_flag)
+            return cur.rowcount
 
 @_pg_retry
 def fetch_pushed_rows_for_status_check(limit: int = 100) -> List[dict]:
@@ -695,10 +722,16 @@ def update_status_check_attempt(reqid: int) -> None:
         with conn.cursor() as cur:
             cur.execute(sql, (reqid,))
 
+_CALLBACK_ROW_COLUMNS = """
+            reqid, caf_serial_no, gsmno, batch_date, push_flag,
+            final_status, push_remarks, pyro_trans_id, client_txn_id, frcamt
+"""
+
+
 @_pg_retry
 def find_row_by_pyro_trans_id(pyro_trans_id: int) -> Optional[dict]:
-    sql = """
-        SELECT reqid, caf_serial_no, gsmno, batch_date, push_flag
+    sql = f"""
+        SELECT {_CALLBACK_ROW_COLUMNS}
         FROM public.frc_pyro_request_data
         WHERE pyro_trans_id = %s
     """
@@ -707,6 +740,62 @@ def find_row_by_pyro_trans_id(pyro_trans_id: int) -> Optional[dict]:
             cur.execute(sql, (pyro_trans_id,))
             row = cur.fetchone()
             return dict(row) if row else None
+
+
+@_pg_retry
+def find_row_by_client_txn_id(client_txn_id: str) -> Optional[dict]:
+    """Fallback lookup for callbacks whose transactionId was never stored
+    (callback raced mark_as_pushed, or the submit timed out).
+
+    clientTxnId is always str(reqid).zfill(5), so the lookup goes through the PK.
+    """
+    text = str(client_txn_id).strip() if client_txn_id is not None else ""
+    if not text.isdigit():
+        return None
+    sql = f"""
+        SELECT {_CALLBACK_ROW_COLUMNS}
+        FROM public.frc_pyro_request_data
+        WHERE reqid = %s
+          AND (client_txn_id IS NULL OR client_txn_id = %s)
+    """
+    with get_pg_write_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(sql, (int(text), text))
+            row = cur.fetchone()
+            if not row:
+                return None
+            row = dict(row)
+            # Exact identity check: '0501' must not match reqid 501 stored as '00501'.
+            if str(row["reqid"]).zfill(5)[:15] != text:
+                return None
+            return row
+
+
+@_pg_retry
+def park_stale_pushed_rows(max_age_minutes: int = 60) -> List[int]:
+    """Park pushed rows that never got a final status within the polling window.
+
+    Without this, a row whose status checks all failed with transport errors would
+    age out of the polling window and stay 'P' forever. Parked rows stay resolvable
+    by a late callback.
+    """
+    remarks = f"{RECONCILE_REMARK_PREFIX} no final status within {max_age_minutes} min of push"[:200]
+    sql = """
+        UPDATE public.frc_pyro_request_data
+        SET
+            push_flag    = 'F',
+            final_status = NULL,
+            push_remarks = %s,
+            updated_ts   = CURRENT_TIMESTAMP
+        WHERE push_flag = 'P'
+          AND push_date IS NOT NULL
+          AND push_date < CURRENT_TIMESTAMP - (%s * INTERVAL '1 minute')
+        RETURNING reqid
+    """
+    with get_pg_write_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, (remarks, max_age_minutes))
+            return [r[0] for r in cur.fetchall()]
 
 
 # ── Transaction log ────────────────────────────────────────────────────────────
@@ -754,14 +843,20 @@ async def async_release_unprocessed_claims(reqids: Sequence[int]):
     return await asyncio.to_thread(release_unprocessed_claims, reqids)
 
 async def async_mark_as_pushed(reqid, pyro_trans_id, response_text, msg2pyro, sc):
-    await asyncio.to_thread(mark_as_pushed, reqid, pyro_trans_id,
-                            response_text, msg2pyro, sc)
+    return await asyncio.to_thread(mark_as_pushed, reqid, pyro_trans_id,
+                                   response_text, msg2pyro, sc)
 
 async def async_mark_as_success(reqid, response_text, balance_before, balance_after,
                                 final_statuscode, pyro_trans_id=None):
-    await asyncio.to_thread(mark_as_success, reqid, response_text,
-                            balance_before, balance_after, final_statuscode,
-                            pyro_trans_id)
+    return await asyncio.to_thread(mark_as_success, reqid, response_text,
+                                   balance_before, balance_after, final_statuscode,
+                                   pyro_trans_id)
+
+async def async_find_row_by_client_txn_id(client_txn_id):
+    return await asyncio.to_thread(find_row_by_client_txn_id, client_txn_id)
+
+async def async_park_stale_pushed_rows(max_age_minutes: int = 60):
+    return await asyncio.to_thread(park_stale_pushed_rows, max_age_minutes)
 
 async def async_mark_for_reconciliation(reqid, reason, response_text=None,
                                         status_code=None, pyro_trans_id=None):
@@ -770,8 +865,8 @@ async def async_mark_for_reconciliation(reqid, reason, response_text=None,
 
 async def async_mark_as_failed(reqid, push_flag, pyro_msg,
                                 response_text=None, final_statuscode=None):
-    await asyncio.to_thread(mark_as_failed, reqid, push_flag, pyro_msg,
-                            response_text, final_statuscode)
+    return await asyncio.to_thread(mark_as_failed, reqid, push_flag, pyro_msg,
+                                   response_text, final_statuscode)
 
 async def async_find_row_by_pyro_trans_id(pyro_trans_id):
     return await asyncio.to_thread(find_row_by_pyro_trans_id, pyro_trans_id)

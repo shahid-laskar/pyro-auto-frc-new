@@ -30,6 +30,10 @@ async def lifespan(app: FastAPI):
     logger.info("  Pyro URL      : %s", settings.pyro_base_url)
     logger.info("  Callback URL  : %s/callback/recharge", settings.callback_base_url)    
     logger.info("  Scheduler     : %s", "enabled" if settings.enable_scheduler else "disabled")
+    if not settings.callback_allowed_ips.strip():
+        logger.warning("  Callback IPs  : CALLBACK_ALLOWED_IPS is empty -- /callback/recharge accepts any source")
+    else:
+        logger.info("  Callback IPs  : %s", settings.callback_allowed_ips)
     init_pg_pool()
     init_oracle_pool()
     init_http_client()

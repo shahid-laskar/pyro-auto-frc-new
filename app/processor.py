@@ -130,7 +130,42 @@ async def process_pending_recharges(
     concurrency = getattr(settings, "recharge_concurrency", 4)
     sem = asyncio.Semaphore(concurrency)
 
-    async def _dispatch_single_row(row: dict) -> None:
+    async def _dispatch_safely(row: dict) -> None:
+        """Isolate one row: an exception never escapes into gather() or other rows."""
+        nonlocal retryable, reconcile
+        progress: dict = {}
+        try:
+            await _dispatch_single_row(row, progress)
+        except Exception as exc:
+            reqid = row.get("reqid")
+            response = progress.get("response")
+            if response is None:
+                # Failed before anything was sent to Pyro (e.g. MPIN decrypt / bad row
+                # data / DB error): release the claim without burning a retry.
+                logger.error("reqid=%s dispatch error before send (%s: %s) -- releasing claim",
+                             reqid, type(exc).__name__, exc)
+                try:
+                    await async_release_unprocessed_claims([reqid])
+                except Exception as rel_exc:
+                    logger.error("reqid=%s could not release claim: %s", reqid, rel_exc)
+                processed_reqids.add(reqid)
+                retryable += 1
+                return
+            # Pyro already answered but recording the result failed: never retry it.
+            logger.critical("reqid=%s error AFTER Pyro response (%s: %s) -- parking. response=%s",
+                            reqid, type(exc).__name__, exc, json.dumps(response)[:500])
+            try:
+                await _park(
+                    reqid, f"internal error after Pyro response: {type(exc).__name__}: {exc}",
+                    json.dumps(response), response.get("statusCode"),
+                    (response.get("data") or {}).get("transactionId"),
+                )
+            except Exception as park_exc:
+                logger.critical("reqid=%s could not park after error: %s -- row stays 'P' "
+                                "for manual reconciliation", reqid, park_exc)
+            reconcile += 1
+
+    async def _dispatch_single_row(row: dict, progress: dict) -> None:
         nonlocal abort_batch, registered, perm_failed, retryable, reconcile
 
         reqid         = row["reqid"]
@@ -138,12 +173,13 @@ async def process_pending_recharges(
         gsmno         = row["gsmno"]
         dealer_msisdn = row["vendormsisdn"] or row["ctopup_number"]
         amount        = int(row["frcamt"])
-        mpin          = decrypt(row["mpin"], settings.pyro_secret_key)
         attempt       = int(row["retry_count"]) + 1
 
         async with sem:
             if abort_batch:
                 return
+
+            mpin = decrypt(row["mpin"], settings.pyro_secret_key)
 
             if dealer_msisdn in exhausted_dealers:
                 # Release without any synthetic Pyro message — dealer skipped, not failed
@@ -171,6 +207,7 @@ async def process_pending_recharges(
                 mpin=mpin,
                 attempt_no=attempt,
             )
+            progress["response"] = response
 
             status_code   = response.get("statusCode")
             response_text = json.dumps(response)
@@ -287,8 +324,14 @@ async def process_pending_recharges(
                     retryable += 1
 
     try:
-        tasks = [_dispatch_single_row(row) for row in rows]
-        await asyncio.gather(*tasks)
+        # Every task handles its own errors; return_exceptions makes sure gather only
+        # returns once ALL tasks have finished, so the release below never races a
+        # task that is still about to send.
+        results = await asyncio.gather(*(_dispatch_safely(row) for row in rows),
+                                       return_exceptions=True)
+        for row, result in zip(rows, results):
+            if isinstance(result, Exception):
+                logger.critical("reqid=%s unexpected dispatch failure: %r", row.get("reqid"), result)
     finally:
         unprocessed_reqids = [r["reqid"] for r in rows if r["reqid"] not in processed_reqids]
         if unprocessed_reqids:

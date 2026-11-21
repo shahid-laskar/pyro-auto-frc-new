@@ -512,6 +512,8 @@ class TestAllModeStatusCheckerRegression:
         mock_mark_success.assert_called_once()
 
     @pytest.mark.asyncio
+    @patch("app.status_checker.async_park_stale_pushed_rows", new_callable=AsyncMock, return_value=[])
+    @patch("app.status_checker.async_mark_for_reconciliation", new_callable=AsyncMock)
     @patch("app.status_checker.async_mark_as_failed")
     @patch("app.status_checker.check_transaction_status")
     @patch("app.status_checker.async_update_status_check_attempt")
@@ -522,8 +524,11 @@ class TestAllModeStatusCheckerRegression:
         mock_update_attempt,
         mock_check_status,
         mock_mark_failed,
+        mock_reconcile,
+        mock_park_stale,
     ):
-        """Status 901 retries if attempts < max, marks failed when max attempts reached."""
+        """Status 901 retries if attempts < max; at max attempts the row is parked for
+        reconciliation (not failed), because the recharge may still complete."""
         # Row with attempt 4 (settings.status_check_max_attempts = 5) -> attempt_no = 5 (max)
         mock_fetch_rows.return_value = [
             {"reqid": 802, "pyro_trans_id": 999112, "caf_serial_no": "CAF802", "gsmno": "9412345678", "batch_date": "2026-09-01", "status_check_count": 4},
@@ -537,8 +542,10 @@ class TestAllModeStatusCheckerRegression:
         summary = await run_status_checks()
 
         assert summary["checked"] == 1
-        assert summary["failed"] == 1
-        mock_mark_failed.assert_called_once()
+        assert summary["failed"] == 0
+        assert summary["parked"] == 1
+        mock_mark_failed.assert_not_called()
+        mock_reconcile.assert_awaited_once()
 
 
 # ── Scheduler Regression ───────────────────────────────────────────────────────

@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     recharge_max_retries: int = 3
     # Deployment
     callback_base_url: str
+    # Comma-separated source IPs allowed to POST /callback/recharge (Pyro egress IPs).
+    # Empty = allow all (logged as a warning at startup).
+    callback_allowed_ips: str = ""
+    # Peers whose X-Real-IP / X-Forwarded-For header is trusted (the local nginx).
+    callback_trusted_proxies: str = "127.0.0.1,::1"
 
     # Scheduler
     enable_scheduler: bool = True    
