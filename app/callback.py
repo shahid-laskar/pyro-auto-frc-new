@@ -202,8 +202,9 @@ async def recharge_callback(request: Request):
                 "Callback SUCCESS for reqid=%s previously %s (final_status=%s, remarks=%s) -- "
                 "recording success", reqid, current_flag, row.get("final_status"), row.get("push_remarks"),
             )
-        balance_before = data.get("dealerBalanceBefore", 0.0)
-        balance_after  = data.get("dealerBalanceAfter", 0.0)
+        # Missing balances stay NULL rather than being recorded as 0.00
+        balance_before = data.get("dealerBalanceBefore")
+        balance_after  = data.get("dealerBalanceAfter")
         updated = await async_mark_as_success(
             reqid, body_text, balance_before, balance_after, status_code, pyro_txn_id_int,
         )

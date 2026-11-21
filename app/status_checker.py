@@ -133,7 +133,7 @@ async def run_status_checks() -> dict:
         elif status_code == 2000:
             updated = await async_mark_as_success(
                 reqid, response_text,
-                inner.get("dealerBalanceBefore", 0.0), inner.get("dealerBalanceAfter", 0.0),
+                inner.get("dealerBalanceBefore"), inner.get("dealerBalanceAfter"),
                 status_code,
             )
             if updated == 0:

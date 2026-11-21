@@ -209,7 +209,7 @@ async def recharge(
         status_code = data.get("statusCode", -1)
         is_success  = "Y" if status_code in (STATUS_SUCCESS, STATUS_REGISTERED) else "N"
         is_perm     = "Y" if status_code in PERMANENT_FAILURE_CODES else "N"
-        pyro_txn_id = data.get("data", {}).get("transactionId")
+        pyro_txn_id = (data.get("data") or {}).get("transactionId")   # "data": null on errors
 
         await _log(
             reqid, caf_serial_no, gsmno, batch_date, client_txn_id,

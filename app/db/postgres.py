@@ -51,7 +51,10 @@ IN_STATUS_CONFIRMED  = "C"  # Oracle claim confirmed (DISPATCHABLE)
 IN_STATUS_FAILED     = "F"  # Oracle claim failed or unrecoverable staging failure
 
 # Pyro codes -> permanent failure (no auto-retry)
-PERMANENT_FAILURE_CODES = {406, 505, 5006, 5007, 5011, 5012, 5030}
+# 400  request validation failed (identical resend fails the same way)
+# 5010 only FRC accounts/plans allowed (subscriber already recharged)
+# 5017 invalid clientTxnId
+PERMANENT_FAILURE_CODES = {400, 406, 505, 5006, 5007, 5010, 5011, 5012, 5017, 5030}
 # Subset: invalid data errors -> BCD status 'ID'
 INVALID_DATA_CODES = {5006, 5011, 5012, 5030}
 
@@ -704,6 +707,7 @@ def fetch_pushed_rows_for_status_check(limit: int = 100) -> List[dict]:
             status_check_count, frcamt
         FROM public.frc_pyro_request_data
         WHERE push_flag = 'P'
+          AND pyro_trans_id IS NOT NULL      -- cannot be polled without it; stale sweep parks it
           AND status_check_eligible_at <= CURRENT_TIMESTAMP
           AND push_date >= CURRENT_TIMESTAMP - INTERVAL '60 minutes'
           AND push_date <= CURRENT_TIMESTAMP - INTERVAL '2 minutes'
