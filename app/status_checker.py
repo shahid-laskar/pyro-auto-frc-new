@@ -15,12 +15,16 @@ from app.db.postgres import (
 )
 from app.callback import validate_txn_data
 from app.pyro_client import check_transaction_status
+from app.auth.token_manager import token_manager
+from app.pyro_outcome import (
+    OUTCOME_RECONCILE, OUTCOME_SUCCESS, TERMINAL_FAILURE_CODES, classify_2000, is_token_failure,
+)
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 # Codes that are terminal when received from status check (stop polling immediately)
-_TERMINAL_STATUS_CODES = {5010, 5030, 5005, 5011, 5012, 902}
+_TERMINAL_STATUS_CODES = TERMINAL_FAILURE_CODES
 
 # Pushed rows still without a final status after this long are parked for
 # reconciliation (they stay resolvable by a late callback).
@@ -69,12 +73,12 @@ async def run_status_checks() -> dict:
     if not rows:
         logger.info("Status checker: no rows pending")
         return {"checked": 0, "success": 0, "failed": 0, "retry": 0,
-                "parked": parked, "transport_error": 0}
+                "parked": parked, "transport_error": 0, "token_error": 0}
 
     logger.info("Status checker: checking %d row(s)", len(rows))
-    success = failed = retry = transport_error = 0
+    success = failed = retry = transport_error = token_error = 0
 
-    for row in rows:
+    for idx, row in enumerate(rows):
         reqid         = row["reqid"]
         pyro_trans_id = row["pyro_trans_id"]
         caf           = row["caf_serial_no"]
@@ -104,21 +108,35 @@ async def run_status_checks() -> dict:
             transport_error += 1
             continue
 
+        if is_token_failure(status_code, pyro_msg):
+            # Pyro rejected our token, not the transaction (H1): do not use up an
+            # attempt. Stop this run -- every remaining row would fail the same way,
+            # and refreshing/logging in per row risks a vendor lockout (H3).
+            # The next run starts with a refreshed (or re-authenticated) token.
+            token_manager.invalidate_access_token()
+            token_error += 1
+            logger.error(
+                "reqid=%s STATUS CHECK token rejected [%s] %s -- not counted; "
+                "stopping this run (%d row(s) left for the next run)",
+                reqid, status_code, pyro_msg, len(rows) - idx - 1,
+            )
+            break
+
         await async_update_status_check_attempt(reqid)
 
+        # statusCode 2000 decides success; a present-but-contradicting status parks the row (C1).
+        outcome, reconcile_reason = classify_2000(response) if status_code == 2000 else (None, None)
+
         txn_errors = []
-        if status_code == 2000 and inner.get("status") == "SUCCESS":
+        if outcome == OUTCOME_SUCCESS:
             txn_id = _to_int(inner.get("transactionId"))
             txn_errors = validate_txn_data(row, inner, txn_id if txn_id is not None else _to_int(pyro_trans_id))
 
-        if status_code == 2000 and inner.get("status") != "SUCCESS":
-            # 2000 is the API call's status; the transaction's own status is data.status.
+        if outcome == OUTCOME_RECONCILE:
             await async_mark_for_reconciliation(
-                reqid, f"status check 2000 with transaction status {inner.get('status')!r}",
-                response_text, status_code,
+                reqid, f"status check {reconcile_reason}", response_text, status_code,
             )
-            logger.critical("reqid=%s STATUS CHECK 2000 without SUCCESS (%s) -- parked",
-                            reqid, inner.get("status"))
+            logger.critical("reqid=%s STATUS CHECK %s -- parked", reqid, reconcile_reason)
             parked += 1
 
         elif status_code == 2000 and txn_errors:
@@ -173,6 +191,7 @@ async def run_status_checks() -> dict:
             retry += 1
 
     summary = {"checked": len(rows), "success": success, "failed": failed, "retry": retry,
-               "parked": parked, "transport_error": transport_error}
+               "parked": parked, "transport_error": transport_error,
+               "token_error": token_error}
     logger.info("Status checker complete -- %s", summary)
     return summary

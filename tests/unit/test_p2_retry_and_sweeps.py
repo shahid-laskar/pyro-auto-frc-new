@@ -175,15 +175,20 @@ class TestStatusCheckSuccessValidation:
         sc["success"].assert_awaited_once()
         sc["park"].assert_not_called()
 
-    @pytest.mark.parametrize("overrides", [
-        {"status": "PENDING"}, {"status": None},
-    ])
-    async def test_2000_without_success_status_is_parked(self, sc, overrides):
-        sc["check"].return_value = _status(**overrides)
+    async def test_2000_with_contradicting_status_is_parked(self, sc):
+        sc["check"].return_value = _status(status="PENDING")
         summary = await run_status_checks()
         sc["success"].assert_not_called()
         sc["park"].assert_awaited_once()
         assert summary["parked"] == 1
+
+    async def test_2000_with_null_data_status_is_success(self, sc):
+        # C1: data.status is not in the spec's parameter table; statusCode 2000 decides.
+        sc["check"].return_value = _status(status=None)
+        summary = await run_status_checks()
+        sc["success"].assert_awaited_once()
+        sc["park"].assert_not_called()
+        assert summary["success"] == 1
 
     @pytest.mark.parametrize("overrides", [
         {"amount": 199.0}, {"destMsisdn": "9400000000"}, {"clientTxnId": "00502"},

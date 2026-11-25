@@ -17,6 +17,9 @@ from app.db.postgres import (
     async_release_unprocessed_claims,
 )
 from app.pyro_client import recharge
+from app.pyro_outcome import (
+    OUTCOME_SUCCESS, classify_2000, is_dealer_status_failure, is_token_failure,
+)
 from app.config import settings
 from app.encryption import decrypt
 
@@ -40,13 +43,7 @@ async def _handle_transient(row, reqid, pyro_msg, response_text, status_code):
     return flag
 
 
-def _is_token_failure(status_code, message) -> bool:
-    """5000 is shared by business and auth errors (spec §9); only the message tells
-    'Invalid access token' / 'Invalid token' / 'Invalid credintials' apart."""
-    if status_code != 5000 or not message:
-        return False
-    text = str(message).lower()
-    return "token" in text or "credintial" in text or "credential" in text
+_is_token_failure = is_token_failure  # shared with the status checker (app.pyro_outcome)
 
 
 def _to_int_or_none(value) -> Optional[int]:
@@ -236,7 +233,8 @@ async def process_pending_recharges(
 
             elif status_code == 2000:
                 # Synchronous completion (spec §9: "Recharge executed successfully").
-                if response.get("status") == "SUCCESS" or inner.get("status") == "SUCCESS":
+                outcome, reconcile_reason = classify_2000(response)
+                if outcome == OUTCOME_SUCCESS:
                     await async_mark_as_success(
                         reqid, response_text,
                         inner.get("dealerBalanceBefore"), inner.get("dealerBalanceAfter"),
@@ -246,7 +244,7 @@ async def process_pending_recharges(
                                 reqid, inner.get("transactionId"))
                     registered += 1
                 else:
-                    await _park(reqid, f"2000 without SUCCESS status: {pyro_msg}",
+                    await _park(reqid, f"{reconcile_reason}: {pyro_msg}",
                                 response_text, status_code, inner.get("transactionId"))
                     reconcile += 1
 
@@ -328,6 +326,14 @@ async def process_pending_recharges(
                 await async_mark_as_failed(reqid, FLAG_RETRY, pyro_msg,
                                            response_text, status_code, count_attempt=False)
                 retryable += 1
+
+            elif is_dealer_status_failure(status_code, pyro_msg):
+                # Dealer blocked / inactive / purged / not authorized (audit M2): retrying
+                # cannot succeed, so fail this row now. Other rows are still sent.
+                await async_mark_as_failed(reqid, FLAG_FAILED, pyro_msg, response_text, status_code)
+                logger.warning("reqid=%s DEALER STATUS [%s] dealerMsisdn=%s: %s",
+                               reqid, status_code, dealer_msisdn, pyro_msg)
+                perm_failed += 1
 
             elif status_code in (500, 5000):
                 flag = await _handle_transient(row, reqid, pyro_msg, response_text, status_code)

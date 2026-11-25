@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
+from app.auth.token_manager import ActionTokens
 from app.db.postgres import RECONCILE_REMARK_PREFIX, mark_for_reconciliation
 from app.processor import process_pending_recharges
 
@@ -154,7 +155,7 @@ class TestMarkForReconciliationSql:
 
 def _tm():
     tm = MagicMock()
-    tm.get_action_token = AsyncMock(return_value="act")
+    tm.get_action_token = AsyncMock(return_value=ActionTokens("s", "a", "act"))
     tm.session_token = "s"
     tm.access_token = "a"
     return tm

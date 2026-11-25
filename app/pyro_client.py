@@ -160,14 +160,15 @@ async def recharge(
     url           = f"{settings.pyro_base_url}/epin-vendor-api/recharge"
     started_at    = datetime.now(timezone.utc)
 
-    # Generate fresh action token immediately before POST
+    # Generate a fresh action token immediately before POST. The returned tokens belong
+    # together; the shared token_manager attributes may already hold another call's (H2).
     try:
-        action_token = await token_manager.get_action_token()
+        tokens = await token_manager.get_action_token()
     except Exception as exc:
-        action_token = None
+        tokens = None
         logger.error("Failed to generate action token: %s", exc)
 
-    if not action_token:
+    if not tokens:
         ended_at = datetime.now(timezone.utc)
         duration = int((ended_at - started_at).total_seconds() * 1000)
         data = {"statusCode": -1, "status": "ERROR",
@@ -193,9 +194,9 @@ async def recharge(
 
     headers = {
         "apiKey":       settings.pyro_api_key,
-        "sessionToken": token_manager.session_token,
-        "accessToken":  token_manager.access_token,
-        "actionToken":  action_token,
+        "sessionToken": tokens.session_token,
+        "accessToken":  tokens.access_token,
+        "actionToken":  tokens.action_token,
     }
     masked_headers = json.dumps({k: "***" for k in headers})
 
@@ -289,6 +290,10 @@ async def check_transaction_status(
     payload        = {"transactionId": str(pyro_trans_id), "clientTxnId": client_txn_id}
     encrypted_body = encrypt(json.dumps(payload), settings.pyro_secret_key)
     access_token   = await token_manager.get_access_token()
+    if not access_token:
+        # Nothing was sent: -1 is treated as a transport error and not counted as an attempt.
+        logger.error("STATUS_CHECK reqid=%s skipped: no access token available", reqid)
+        return {"statusCode": -1, "status": "ERROR", "message": "No access token available"}
     headers        = {"apiKey": settings.pyro_api_key, "accessToken": access_token}
     masked_headers = json.dumps({"apiKey": "***", "accessToken": "***"})
 

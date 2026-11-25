@@ -25,6 +25,7 @@ from app.status_checker import run_status_checks
 
 @pytest.mark.asyncio
 async def test_recharge_error_with_null_data_keeps_its_status_code():
+    from app.auth.token_manager import ActionTokens
     from app.pyro_client import recharge
     resp = MagicMock()
     resp.text = '{"statusCode":5012,"status":"FAILED","message":"Sorry You have Entered Invalid Mpin","data":null}'
@@ -34,7 +35,7 @@ async def test_recharge_error_with_null_data_keeps_its_status_code():
     client = AsyncMock()
     client.post.return_value = resp
     tm = MagicMock()
-    tm.get_action_token = AsyncMock(return_value="act")
+    tm.get_action_token = AsyncMock(return_value=ActionTokens("s", "a", "act"))
     with patch("app.pyro_client.token_manager", tm), \
          patch("app.pyro_client._get_client", return_value=client), \
          patch("app.pyro_client.async_insert_txn_log", new_callable=AsyncMock):

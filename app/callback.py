@@ -14,13 +14,17 @@ from app.db.postgres import (
     async_insert_txn_log,
     async_mark_as_failed,
     async_mark_as_success,
+    async_mark_for_reconciliation,
+)
+from app.pyro_outcome import (
+    OUTCOME_RECONCILE, OUTCOME_SUCCESS, TERMINAL_FAILURE_CODES, classify_2000,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Codes that are terminal when received in a callback (stop processing immediately)
-_TERMINAL_STATUS_CODES = {5010, 5030, 5005, 5011, 5012, 902}
+_TERMINAL_STATUS_CODES = TERMINAL_FAILURE_CODES
 
 
 def _csv_set(value: str) -> set:
@@ -147,7 +151,9 @@ async def recharge_callback(request: Request):
     batch_date   = row.get("batch_date")
     current_flag = row["push_flag"]
     body_text    = json.dumps(body)
-    is_success   = status_code == 2000 and data.get("status") == "SUCCESS"
+    # statusCode 2000 decides success; a present-but-contradicting status parks the row (C1).
+    outcome, reconcile_reason = classify_2000(body) if status_code == 2000 else (None, None)
+    is_success   = outcome == OUTCOME_SUCCESS
 
     validation_errors = validate_txn_data(row, data, pyro_txn_id_int)
     if validation_errors:
@@ -192,7 +198,7 @@ async def recharge_callback(request: Request):
         pyro_status_code=status_code, pyro_status_text=data.get("status"),
         pyro_txn_id=pyro_txn_id_int,
         call_started_at=received_at, call_ended_at=received_at, duration_ms=0,
-        is_success="Y" if status_code == 2000 else "N",
+        is_success="Y" if is_success else "N",
         is_perm_failure="Y" if status_code not in (2000, 2002) else "N",
     )
 
@@ -214,6 +220,14 @@ async def recharge_callback(request: Request):
             logger.info("Callback SUCCESS: reqid=%s pyroTxnId=%s gsmno=%s amount=%s bal_after=%s",
                         reqid, pyro_txn_id, data.get("destMsisdn"),
                         data.get("amount"), balance_after)
+
+    elif outcome == OUTCOME_RECONCILE:
+        # 2000 but the status disagrees: the dealer may have been debited, so never FAILED.
+        await async_mark_for_reconciliation(
+            reqid, f"callback {reconcile_reason}", body_text, status_code, pyro_txn_id_int,
+        )
+        logger.critical("Callback 2000 with contradicting status: reqid=%s %s -- parked",
+                        reqid, reconcile_reason)
 
     elif status_code == 2002:
         logger.info("Callback: reqid=%s still IN_PROCESS (2002) -- awaiting final callback", reqid)
