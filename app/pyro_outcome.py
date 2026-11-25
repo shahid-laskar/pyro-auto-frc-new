@@ -14,7 +14,8 @@ OUTCOME_RECONCILE = "RECONCILE"
 #   5010 only First Recharge accounts/plans allowed   5030 / 5005  IN / network failure
 #   5011 invalid denomination                         5012 invalid MPIN
 #   902  (undocumented, see audit L5)
-#   5027 IN request failed / null IN response (v3.0)  1030 txn_in_failed (v3.0)
+#   5027 IN request failed / null IN response (v3.0)
+#   1030 denomination not eligible for the subscriber, IN validation (v3.0; maps to txn_in_failed)
 TERMINAL_FAILURE_CODES = frozenset({5010, 5030, 5005, 5011, 5012, 902, 5027, 1030})
 
 

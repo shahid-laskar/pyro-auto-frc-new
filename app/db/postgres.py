@@ -55,7 +55,8 @@ IN_STATUS_FAILED     = "F"  # Oracle claim failed or unrecoverable staging failu
 # 5010 only FRC accounts/plans allowed (subscriber already recharged)
 # 5017 invalid clientTxnId
 # 5005 IN/network failure (v2.0 allowed it synchronously; retrying reuses the clientTxnId -> 5018)
-# 5027 / 1030 IN request failed (v3.0 callback codes; terminal per audit H4, same if synchronous)
+# 5027 IN request failed / 1030 denomination not eligible at IN (v3.0 callback codes;
+#      terminal per audit H4, same if synchronous)
 PERMANENT_FAILURE_CODES = {400, 406, 505, 5005, 5006, 5007, 5010, 5011, 5012, 5017, 5030,
                            5027, 1030}
 # Subset: invalid data errors -> BCD status 'ID'
