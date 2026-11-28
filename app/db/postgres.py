@@ -16,9 +16,9 @@ logger = logging.getLogger(__name__)
 def _pg_retry(fn):
     """Retry a synchronous DB function once on OperationalError.
 
-    When a pooled connection goes stale, get_pg_conn discards it and raises
-    OperationalError. A single retry is enough — the pool always creates a
-    fresh connection for the second attempt.
+    Checkout already pings each pooled connection and discards dead ones
+    (see _checkout_live_conn), so this retry only covers a connection that
+    dies mid-query; the second attempt gets a freshly verified connection.
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -154,18 +154,40 @@ def postgres_health() -> dict:
     }
 
 
+def _checkout_live_conn(pool, role: str):
+    """Check out a connection that is verified alive.
+
+    The pool has no liveness check of its own, and a connection the server or a
+    firewall dropped while idle still reports conn.closed == 0 until it is used.
+    After a DB restart every idle connection is dead, so ping each one with
+    SELECT 1 and discard failures; once the idle ones are used up the pool opens
+    a fresh connection. If the database is really down, that final getconn()
+    raises OperationalError to the caller.
+    """
+    attempts = max(1, int(getattr(pool, "maxconn", 1) or 1)) + 1
+    for _ in range(attempts):
+        conn = pool.getconn()
+        if not conn.closed:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                conn.rollback()  # end the ping's implicit transaction
+                return conn
+            except psycopg2.Error:
+                pass
+        logger.warning("Postgres %s: dead connection detected on checkout — discarding", role)
+        pool.putconn(conn, close=True)
+    raise psycopg2.OperationalError(
+        f"Postgres {role}: no live connection after {attempts} checkout attempts"
+    )
+
+
 @contextmanager
 def _get_pg_conn(role: str) -> Generator:
     pool = _read_pool if role == "read" else _write_pool
     if pool is None:
         raise RuntimeError(f"Postgres {role} pool is not initialized")
-    conn = pool.getconn()
-    # The pool has no built-in liveness check — swap out any connection the
-    # server dropped while it was idle (presents as conn.closed != 0).
-    if conn.closed:
-        logger.warning("Postgres: stale connection detected on checkout — replacing")
-        pool.putconn(conn, close=True)
-        conn = pool.getconn()
+    conn = _checkout_live_conn(pool, role)
     discard = False
     try:
         yield conn

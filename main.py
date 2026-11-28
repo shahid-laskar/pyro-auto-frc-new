@@ -23,6 +23,25 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+class _HealthCheckAccessFilter(logging.Filter):
+    """Drop successful /health hits from uvicorn's access log (Docker/BFF probes).
+
+    Non-200 health responses are still logged so failures stay visible.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # uvicorn access args: (client_addr, method, full_path, http_version, status_code)
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 5:
+            path = str(args[2]).split("?", 1)[0]
+            if path.endswith("/health") and args[4] == 200:
+                return False
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_HealthCheckAccessFilter())
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     scheduler_started = False
